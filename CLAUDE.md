@@ -33,7 +33,8 @@ Source of truth for scope and design:
 
 - Python 3.12, type hints everywhere, `ruff` (lint + format) and `mypy` must pass. The whole backend (including tests) is checked with `mypy --strict`, which covers the stricter requirement for collectors.
 - Commands (run from `backend/`, require `uv`): `uv sync`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy`, `uv run pytest`. API: `uv run uvicorn app.main:create_app --factory`.
-- Tests run with network sockets disabled (`pytest-socket`). Never enable real network access in tests.
+- Tests run with network sockets disabled (`pytest-socket`). Never enable real network access in tests. The only exception is `tests/db/`, which may connect to `127.0.0.1` (the disposable database given by `TEST_DATABASE_URL`) through `DB_TEST_MARKS`.
+- New tables: models use `ClassifiedMixin` for the `classification` column; never add a Python-side default for it (the database default is `sensitive`).
 - Async throughout: SQLAlchemy 2.0 async, httpx async.
 - Configuration only through `app.core.config` (pydantic-settings). Never read `os.environ` elsewhere.
 - Schema changes only through Alembic migrations. Never edit an applied migration.

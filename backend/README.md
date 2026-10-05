@@ -15,12 +15,28 @@ uv run mypy                  # type checking (strict)
 uv run pytest                # tests (network access is blocked)
 ```
 
-Run the API locally:
+Run the API locally (needs `DATABASE_URL`):
 
 ```bash
 uv run uvicorn app.main:create_app --factory --reload
 ```
 
-Then open `http://127.0.0.1:8000/api/v1/health` or the OpenAPI docs at `http://127.0.0.1:8000/api/v1/docs`.
+Then open `http://127.0.0.1:8000/api/v1/health` (liveness), `/api/v1/health/ready` (database reachable) or the OpenAPI docs at `/api/v1/docs`.
+
+## Database
+
+Schema changes go only through Alembic migrations in `migrations/versions/`:
+
+```bash
+uv run alembic upgrade head          # apply all migrations (uses DATABASE_URL)
+uv run alembic downgrade base        # revert everything
+uv run alembic revision -m "..."     # new empty revision
+```
+
+Tests in `tests/db/` run against a real, disposable PostgreSQL given by `TEST_DATABASE_URL` (they drop and recreate the schema). Without it they are skipped locally; in CI they are mandatory:
+
+```bash
+TEST_DATABASE_URL=postgresql+asyncpg://specula:specula@127.0.0.1:5432/specula_test uv run pytest
+```
 
 Configuration comes only from environment variables, listed in [`.env.example`](../.env.example).
