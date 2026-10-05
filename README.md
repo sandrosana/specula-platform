@@ -1,146 +1,47 @@
-# OSINT Toolkit – Swiss Army Knife for Domain Recon
+# Specula
 
-A modular, extensible, and automated **OSINT collection toolkit** designed for rapid domain reconnaissance and report generation.
+**Specula** is a modular platform for threat and exposure intelligence.
 
-## 🔍 Features
+| Module | Status |
+|--------|--------|
+| **Specula Threat** – Threat Intelligence | In development (MVP) |
+| Specula Exposure | Planned |
+| Specula Third Party | Planned |
+| Specula OSINT | Planned |
+| Specula CLOSINT | Planned |
 
-With one command, you get:
+## Specula Threat
 
-- ✅ WHOIS domain lookup
-- 🌐 Subdomain discovery (via `subfinder` and `amass`)
-- 🌀 Typosquatting detection (via `dnstwist`)
-- ✉️ Email harvesting (via `theHarvester`)
-- 🕵️‍♂️ Account footprinting (via `holehe`)
-- 🌍 IP and service enumeration (via `shodan`)
-- 🕸️ URL scan results (via `urlscanio`)
-- 📊 Auto-generated HTML report (in dark mode)
+Specula Threat collects, normalizes and correlates data from public and authenticated threat intelligence sources and presents it in a dashboard for a team of analysts. It answers three questions:
 
-Optional interactive CLI for single-tool usage.
+1. **What is happening right now?** Global dashboard and intel feed.
+2. **What should I prioritize?** Vulnerabilities that are exploited or likely to be exploited, ranked by priority levels P1–P4.
+3. **What affects my perimeter?** Dashboards by vendor, country, sector, ransomware group and malware family.
 
----
+It performs no active scanning.
 
-## 🚀 Quick Installation
+**MVP sources:** NVD, CISA KEV, EPSS, ransomware.live (PRO API), abuse.ch, AlienVault OTX, CSIRT Italia.
 
-```bash
-git clone https://github.com/sandrosana/osint-toolkit.git
-cd osint-toolkit
-bash install.sh
-```
+**Stack:** API-first Python backend (FastAPI), plugin-based collectors, PostgreSQL, React frontend, Docker Compose deployment on a Linux VM.
 
-This script will:
-- Copy all scripts and templates to `~/.osint-toolkit/`
-- Add the `osint-scan` command alias to your shell config (`.zshrc` or `.bashrc`)
+## Project status
 
----
+The project is in phase **M0** of the [implementation plan](docs/piano-implementazione.md): documentation approved, no code released yet.
 
-## 🧪 Usage
+## Documentation
 
-### Full scan on a domain
+The project documentation is written in Italian.
 
-```bash
-osint-scan example.com
-```
+- [Functional specification](docs/specifica-funzionale-dashboard.md)
+- [Architecture](docs/architettura.md)
+- [Implementation plan](docs/piano-implementazione.md)
+- [Visual identity and design tokens](docs/identita-visiva.md)
+- [Project rules for Claude Code](CLAUDE.md)
 
-The report will be saved as:
-```
-~/.osint-toolkit/reports/example.com-YYYY-MM-DD_HH-MM/domain_report.html
-```
+## OSINT Toolkit (previous version)
 
-### Interactive mode (run individual tools)
+This repository previously contained **OSINT Toolkit**, a set of bash scripts for domain reconnaissance. Those scripts are not part of Specula and have been removed. The last version is preserved in the [`legacy-final`](https://github.com/sandrosana/specula-platform/tree/legacy-final) tag.
 
-```bash
-bash ~/.osint-toolkit/scripts/osint-menu.sh
-```
+## License
 
----
-
-## 📂 Toolkit Structure
-
-```
-.osint-toolkit/
-├── scripts/
-│   ├── osint-launch.sh     # Main automation script
-│   ├── osint-menu.sh       # Interactive mode
-│   └── osint-report.sh     # HTML report generator
-├── templates/
-│   └── report_template.html
-└── reports/
-    └── [DOMAIN]-[TIMESTAMP]/
-```
-
----
-
-## ⚙️ Dependencies
-
-You will need the following tools installed and accessible in your PATH:
-
-| Tool           | Recommended Install                |
-|----------------|-------------------------------------|
-| `whois`        | `apt install whois`                |
-| `subfinder`    | Preinstalled on Kali               |
-| `amass`        | `apt install amass`                |
-| `dnstwist`     | `pipx install dnstwist`            |
-| `theHarvester` | `apt install theharvester`         |
-| `holehe`       | `pipx install holehe`              |
-| `shodan`       | `pipx install shodan`              |
-| `urlscanio`    | `pipx install urlscanio`           |
-| `jq`           | `apt install jq`                   |
-| `dig`          | in `dnsutils` (`apt install dnsutils`) |
-
----
-
-## 🔐 Shodan API Key Setup
-
-```bash
-shodan init YOUR_API_KEY
-```
-
-This will enable Shodan queries for discovered subdomains.
-
----
-
-## 🌒 HTML Report
-
-The report is built from a dark-mode friendly HTML template. It contains:
-
-- WHOIS data
-- All subdomains found (with count)
-- DNS twisting results
-- Email addresses (if any)
-- Holehe account check results
-- Shodan raw output for all resolvable IPs
-- URLScan search result
-
-You can open it directly in your browser.
-
----
-
-## 📦 Packaging (Coming Soon)
-
-We're working on:
-- `.deb` installer
-- Python wrapper with CLI parser
-- Plugin system for future tool integrations (e.g. Censys, FOFA, GreyNoise)
-
----
-
-## 🪪 License
-
-MIT – use it, improve it, share it. Attribution appreciated.
-
----
-
-## 👤 Author
-
-**Sandro Sana** – [LinkedIn](https://www.linkedin.com/in/sandrosana) / [RedHotCyber](https://www.redhotcyber.com/)
-
----
-
-## 💬 Feedback & Contributions
-
-Pull requests and feature suggestions are welcome. 
-Use the [Issues](https://github.com/sandrosana/osint-toolkit/issues) section to report bugs or request features.
-
----
-
-Stay stealthy 🕵️ and automate your recon! 💣
+[MIT](LICENSE) – © 2025-2026 Sandro Sana
