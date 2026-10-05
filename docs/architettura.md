@@ -66,7 +66,7 @@
 
 | Ambito | Scelta |
 |--------|--------|
-| Ambiente di esecuzione | VM **Debian 13 (trixie)**, ultima versione stabile, nel LAB Eurosystem, indirizzo **10.128.4.58**, Docker Engine con plugin Compose. La VM **non ha GPU** e **non richiede proxy** per uscire verso internet |
+| Ambiente di esecuzione | VM **Debian 13 (trixie)**, ultima versione stabile, nel LAB Eurosystem, indirizzo **10.128.4.106**, Docker Engine con plugin Compose. La VM **non ha GPU** e **non richiede proxy** per uscire verso internet |
 | Linguaggio | Python 3.12 |
 | API | FastAPI + Pydantic v2 |
 | ORM / DB | SQLAlchemy 2.0 (async) + asyncpg, PostgreSQL 16 (estensioni `pg_trgm`, `unaccent`) |
@@ -485,7 +485,7 @@ La classe è assegnata **dal collector, al momento della raccolta**, e non viene
 | 6 | Autenticazione | Utenti locali nell'MVP; Entra ID (OIDC) come primo sviluppo successivo |
 | 7 | Script legacy | Eliminati dopo aver creato il tag `legacy-final` (§12) |
 | 8 | Arricchimento AI | Approccio ibrido (§13.4): interfaccia comune con provider intercambiabili; provider remoto solo per dati `public`, provider locale su CPU per `internal` e `sensitive`; audit di ogni chiamata remota. Fuori MVP: nell'MVP esiste solo il campo `classification` |
-| 12 | TLS e rete nel LAB | **Certificato autofirmato** generato sulla VM dalla CA locale di Caddy (`tls internal`), valido per l'indirizzo 10.128.4.58. Per evitare l'avviso del browser, il certificato radice della CA di Caddy va installato sui PC degli analisti. Nessun proxy in uscita |
+| 12 | TLS e rete nel LAB | **Certificato autofirmato** generato sulla VM dalla CA locale di Caddy (`tls internal`), valido per l'indirizzo 10.128.4.106. Per evitare l'avviso del browser, il certificato radice della CA di Caddy va installato sui PC degli analisti. Nessun proxy in uscita |
 | 14 | Destinazione dei backup | **Disco dedicato collegato alla VM**, separato dal disco di sistema e montato in `/mnt/specula-backup` (§15.1) |
 
 ### 11.2 Aperte

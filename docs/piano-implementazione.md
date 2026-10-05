@@ -22,7 +22,7 @@
 | Milestone | Obiettivo | Prerequisiti |
 |-----------|-----------|--------------|
 | **M0** | Rename in `specula-platform`, pulizia legacy e documentazione nel repository | Accesso in scrittura a GitHub dalla workstation |
-| **M1** | Scheletro: compose, FastAPI, DB, Alembic, config, CI, backup | Decisioni §11 #12 e #14 prese (certificato autofirmato, disco di backup dedicato); VM Debian del LAB (10.128.4.58) pronta con Docker e il disco di backup montato |
+| **M1** | Scheletro: compose, FastAPI, DB, Alembic, config, CI, backup | Decisioni §11 #12 e #14 prese (certificato autofirmato, disco di backup dedicato); VM Debian del LAB (10.128.4.106) pronta con Docker e il disco di backup montato |
 | **M2** | Framework collector + CISA KEV end-to-end, `GET /kev`, `GET /sources` | M1 |
 | **M3** | NVD, EPSS, livelli di priorità P1–P4 | M2; chiave NVD consigliata |
 | **M4** | Autenticazione, ruoli, abilitazioni e filtri per classe | M3 |

@@ -74,6 +74,6 @@ Source of truth for scope and design:
 
 ## Environment notes
 
-- Target runtime: Debian 13 VM in the Eurosystem LAB (10.128.4.58) with Docker Engine + Compose plugin; no GPU, no outbound proxy. HTTPS via Caddy `tls internal` (self-signed local CA). Backups go to a dedicated disk mounted at `/mnt/specula-backup`.
+- Target runtime: Debian 13 VM in the Eurosystem LAB (10.128.4.106) with Docker Engine + Compose plugin; no GPU, no outbound proxy. HTTPS via Caddy `tls internal` (self-signed local CA). Backups go to a dedicated disk mounted at `/mnt/specula-backup`.
 - The owner's Windows workstation has no Docker, Node or reliable Python. Code written there cannot be run locally: say so explicitly instead of claiming it works. Build and test on the LAB VM or in CI.
 - Legacy bash OSINT scripts (`scripts/`, `templates/`, `install.sh`) will be deleted after tagging `legacy-final` (`docs/architettura.md` §12). Do not extend them.
