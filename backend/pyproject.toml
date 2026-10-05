@@ -7,10 +7,13 @@ license = "MIT"
 authors = [{ name = "Sandro Sana", email = "sandro@sanasandro.it" }]
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "alembic>=1.13,<2",
+    "asyncpg>=0.29,<1",
     "fastapi>=0.115,<1",
-    "uvicorn[standard]>=0.30,<1",
     "pydantic>=2.9,<3",
     "pydantic-settings>=2.5,<3",
+    "sqlalchemy[asyncio]>=2.0.30,<2.1",
+    "uvicorn[standard]>=0.30,<1",
 ]
 
 [dependency-groups]
@@ -51,14 +54,20 @@ select = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101"]  # assert is how pytest works
+"tests/**" = [
+    "S101",  # assert is how pytest works
+    "S105",  # tests use fake credentials
+    "S106",
+]
+"migrations/versions/*" = ["N999"]  # revision files start with the revision number
 
 # --- mypy -------------------------------------------------------------------
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["app", "tests"]
+# Revision files are named <rev>_<slug>.py, which is not a valid module name for mypy.
+files = ["app", "tests", "migrations/env.py"]
 plugins = ["pydantic.mypy"]
 
 [tool.pydantic-mypy]
@@ -71,4 +80,5 @@ warn_required_dynamic_aliases = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # Tests must never reach external sources: real network access is blocked.
+# Database tests (tests/db) re-enable sockets for 127.0.0.1 only.
 addopts = "--strict-markers --disable-socket --allow-unix-socket"
