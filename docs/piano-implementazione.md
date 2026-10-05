@@ -1,7 +1,7 @@
 # Specula Threat – Piano di implementazione dell'MVP
 
 > Stato: **APPROVATO – v1.0** (05/10/2026)
-> Riferimenti: [specifica-funzionale-dashboard.md](specifica-funzionale-dashboard.md) (v1.1) · [architettura.md](architettura.md) (v1.1) · [identita-visiva.md](identita-visiva.md)
+> Riferimenti: [specifica-funzionale-dashboard.md](specifica-funzionale-dashboard.md) (v1.2) · [architettura.md](architettura.md) (v1.2) · [identita-visiva.md](identita-visiva.md)
 
 ---
 
@@ -22,7 +22,7 @@
 | Milestone | Obiettivo | Prerequisiti |
 |-----------|-----------|--------------|
 | **M0** | Rename in `specula-platform`, pulizia legacy e documentazione nel repository | Accesso in scrittura a GitHub dalla workstation |
-| **M1** | Scheletro: compose, FastAPI, DB, Alembic, config, CI, backup | Decisioni §11 #12 (TLS e proxy) e #14 (destinazione backup); VM del LAB pronta |
+| **M1** | Scheletro: compose, FastAPI, DB, Alembic, config, CI, backup | Decisioni §11 #12 e #14 prese (certificato autofirmato, disco di backup dedicato); VM Debian del LAB (10.128.4.106) pronta con Docker e il disco di backup montato |
 | **M2** | Framework collector + CISA KEV end-to-end, `GET /kev`, `GET /sources` | M1 |
 | **M3** | NVD, EPSS, livelli di priorità P1–P4 | M2; chiave NVD consigliata |
 | **M4** | Autenticazione, ruoli, abilitazioni e filtri per classe | M3 |
@@ -78,7 +78,7 @@
 - SQLAlchemy async + Alembic: migrazione iniziale con il tipo `classification` (`public` | `internal` | `sensitive`) e la regola del default `sensitive` pronta per tutte le tabelle successive.
 - CI GitHub Actions (architettura §14): `backend-lint`, `backend-types`, `backend-test` con PostgreSQL di servizio, `images`.
 - Docker: immagine Python unica (entrypoint `api` e `scheduler`), compose con `proxy` (Caddy), `api`, `scheduler` (per ora vuoto), `db`, `backup`.
-- Caddy con il certificato scelto (decisione #12) e, **fino a M4**, accesso limitato (allowlist IP del LAB o autenticazione di base sul proxy), perché l'API non ha ancora login.
+- Caddy con certificato autofirmato dalla propria CA locale (`tls internal`, decisione #12) e, **fino a M4**, accesso limitato (allowlist IP del LAB o autenticazione di base sul proxy), perché l'API non ha ancora login.
 - Backup (architettura §15): container `backup`, cifratura, retention, destinazione esterna, `docs/runbook-backup.md`, script `verify-restore.sh`.
 
 **PR previste**

@@ -11,7 +11,7 @@ Source of truth for scope and design:
 ## Workflow rules
 
 - **Spec first.** No feature code without an approved spec. If a task requires behaviour not in the docs, update the docs and get approval before implementing.
-- Docs are approved by the owner (Sandro Sana). Docs marked `BOZZA` are not approved yet: do not implement from them. Spec and architecture are `APPROVATO – v1.1`; changes to them need a new approval.
+- Docs are approved by the owner (Sandro Sana). Docs marked `BOZZA` are not approved yet: do not implement from them. Spec and architecture are `APPROVATO – v1.2`; changes to them need a new approval.
 - Implement milestone by milestone following [docs/piano-implementazione.md](docs/piano-implementazione.md), only once the plan is approved. Do not start a milestone before the previous one meets its completion criterion.
 - Work on feature branches, never commit directly to `main`. Commit only when asked.
 - Every PR must pass CI (ruff, mypy, pytest; see `docs/architettura.md` §14). Never merge with red checks, never skip or disable checks to get green.
@@ -74,6 +74,6 @@ Source of truth for scope and design:
 
 ## Environment notes
 
-- Target runtime: Ubuntu 24.04 VM in the Eurosystem LAB with Docker (no GPU).
+- Target runtime: Debian 13 VM in the Eurosystem LAB (10.128.4.106) with Docker Engine + Compose plugin; no GPU, no outbound proxy. HTTPS via Caddy `tls internal` (self-signed local CA). Backups go to a dedicated disk mounted at `/mnt/specula-backup`.
 - The owner's Windows workstation has no Docker, Node or reliable Python. Code written there cannot be run locally: say so explicitly instead of claiming it works. Build and test on the LAB VM or in CI.
 - Legacy bash OSINT scripts (`scripts/`, `templates/`, `install.sh`) will be deleted after tagging `legacy-final` (`docs/architettura.md` §12). Do not extend them.
