@@ -1,11 +1,11 @@
 # Specula Threat – Specifica funzionale della dashboard
 
-> Stato: **APPROVATO – v1.1** (05/10/2026)
+> Stato: **APPROVATO – v1.2** (05/10/2026)
 > Prodotto: **Specula Threat**, modulo di Threat Intelligence della piattaforma **Specula** (moduli futuri: Exposure, Third Party, OSINT, CLOSINT).
 > Ambito: MVP. Fonti dati: NVD, CISA KEV, EPSS, ransomware.live (API PRO), abuse.ch, AlienVault OTX, CSIRT Italia.
 > Documenti collegati: [architettura.md](architettura.md) · [identita-visiva.md](identita-visiva.md)
 >
-> Versioni: v1.0 approvazione iniziale · v1.1 modifica editoriale (nome del prodotto), nessuna modifica funzionale.
+> Versioni: v1.0 approvazione iniziale · v1.1 modifica editoriale (nome del prodotto), nessuna modifica funzionale · v1.2 destinazione dei backup allineata alla decisione #14 dell'architettura.
 
 ---
 
@@ -237,7 +237,7 @@ Il livello si ricalcola a ogni aggiornamento di KEV o EPSS. Un cambio di livello
 - **Tema:** scuro di default, chiaro disponibile.
 - **Lingua:** UI in italiano nell'MVP, testi predisposti per l'inglese.
 - **Accessibilità:** contrasti AA, legende testuali oltre ai colori, navigazione da tastiera.
-- **Continuità:** backup giornaliero del database su storage esterno alla VM, con prova di ripristino documentata; si perde al massimo un giorno di dati (architettura §15).
+- **Continuità:** backup giornaliero del database su un disco dedicato, separato dal disco di sistema della VM, con prova di ripristino documentata; si perde al massimo un giorno di dati (architettura §15).
 - **Qualità del codice:** ogni modifica passa da una pull request verificata automaticamente (lint, tipi, test) prima del merge (architettura §14).
 
 ## 8. Fuori ambito (MVP)

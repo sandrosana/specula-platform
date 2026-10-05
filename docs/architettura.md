@@ -1,10 +1,10 @@
 # Specula Threat – Architettura
 
-> Stato: **APPROVATO – v1.1** (05/10/2026). Le decisioni ancora aperte sono elencate in §11.2.
+> Stato: **APPROVATO – v1.2** (05/10/2026). Le decisioni ancora aperte sono elencate in §11.2.
 > Prodotto: **Specula Threat**, modulo di Threat Intelligence della piattaforma **Specula** (moduli futuri: Exposure, Third Party, OSINT, CLOSINT). Repository: `specula-platform`.
 > Documenti collegati: [specifica-funzionale-dashboard.md](specifica-funzionale-dashboard.md) · [identita-visiva.md](identita-visiva.md)
 >
-> Versioni: v1.0 approvazione iniziale · v1.1 modifica editoriale (nome del prodotto e del progetto compose), nessuna modifica tecnica.
+> Versioni: v1.0 approvazione iniziale · v1.1 modifica editoriale (nome del prodotto e del progetto compose), nessuna modifica tecnica · v1.2 ambiente LAB (Debian, IP, nessun proxy) e decisioni #12 (TLS) e #14 (backup).
 
 ---
 
@@ -66,19 +66,19 @@
 
 | Ambito | Scelta |
 |--------|--------|
-| Ambiente di esecuzione | VM **Ubuntu 24.04 LTS** nel LAB Eurosystem, Docker Engine con plugin Compose. La VM **non ha GPU** |
+| Ambiente di esecuzione | VM **Debian 13 (trixie)**, ultima versione stabile, nel LAB Eurosystem, indirizzo **10.128.4.58**, Docker Engine con plugin Compose. La VM **non ha GPU** e **non richiede proxy** per uscire verso internet |
 | Linguaggio | Python 3.12 |
 | API | FastAPI + Pydantic v2 |
 | ORM / DB | SQLAlchemy 2.0 (async) + asyncpg, PostgreSQL 16 (estensioni `pg_trgm`, `unaccent`) |
 | Migrazioni | Alembic |
-| HTTP client | httpx (async) + tenacity; supporto a `HTTPS_PROXY` per l'eventuale proxy in uscita del LAB |
+| HTTP client | httpx (async) + tenacity; supporto a `HTTPS_PROXY`, non necessario nel LAB attuale ma utile in altri ambienti |
 | Scheduler | APScheduler 3.x in un processo dedicato, con lock su PostgreSQL |
 | Configurazione | pydantic-settings |
 | Auth | Utenti locali (password argon2, cookie di sessione HttpOnly + CSRF token). Entra ID (OIDC) come primo sviluppo dopo l'MVP |
 | Frontend | React + TypeScript + Vite, TanStack Query, ECharts (grafici e mappa), client generato da OpenAPI |
 | Qualità | ruff, mypy (strict sui collector), pytest + respx |
 | CI | GitHub Actions su ogni PR: ruff, mypy, pytest (§14). **Requisito MVP** |
-| Backup | `pg_dump` giornaliero su volume esterno alla VM, con prova di ripristino documentata (§15). **Requisito MVP** |
+| Backup | `pg_dump` giornaliero su un disco dedicato, separato dal disco di sistema della VM, con prova di ripristino documentata (§15). **Requisito MVP** |
 | Deploy | Docker Compose, Caddy come reverse proxy TLS |
 
 ## 4. Struttura del repository
@@ -463,7 +463,7 @@ La classe è assegnata **dal collector, al momento della raccolta**, e non viene
   OTX_API_KEY=
   MAXMIND_LICENSE_KEY=         # opzionale, GeoLite2 per la mappa
   # Rete LAB
-  HTTPS_PROXY=                 # se il LAB richiede un proxy in uscita
+  HTTPS_PROXY=                 # vuoto nel LAB attuale (nessun proxy in uscita)
   ```
 - Le chiavi delle fonti arrivano solo al container che esegue il collector (`scheduler`, e in futuro il singolo `listener-*`); il container `api` non le riceve.
 - Segreti mascherati nei log.
@@ -485,6 +485,8 @@ La classe è assegnata **dal collector, al momento della raccolta**, e non viene
 | 6 | Autenticazione | Utenti locali nell'MVP; Entra ID (OIDC) come primo sviluppo successivo |
 | 7 | Script legacy | Eliminati dopo aver creato il tag `legacy-final` (§12) |
 | 8 | Arricchimento AI | Approccio ibrido (§13.4): interfaccia comune con provider intercambiabili; provider remoto solo per dati `public`, provider locale su CPU per `internal` e `sensitive`; audit di ogni chiamata remota. Fuori MVP: nell'MVP esiste solo il campo `classification` |
+| 12 | TLS e rete nel LAB | **Certificato autofirmato** generato sulla VM dalla CA locale di Caddy (`tls internal`), valido per l'indirizzo 10.128.4.58. Per evitare l'avviso del browser, il certificato radice della CA di Caddy va installato sui PC degli analisti. Nessun proxy in uscita |
+| 14 | Destinazione dei backup | **Disco dedicato collegato alla VM**, separato dal disco di sistema e montato in `/mnt/specula-backup` (§15.1) |
 
 ### 11.2 Aperte
 
@@ -493,9 +495,7 @@ La classe è assegnata **dal collector, al momento della raccolta**, e non viene
 | 9 | Fonti con uso commerciale "Da verificare" (abuse.ch, OTX, EPSS, CSIRT Italia) | Attive solo nel LAB, in fase di valutazione; prima di qualunque uso in produzione la verifica va chiusa e la tabella §6.2 aggiornata |
 | 10 | CSIRT Italia | Chiedere ad ACN conferma scritta sul riuso del feed MISP e degli avvisi RSS in una piattaforma interna; fino ad allora, per gli avvisi solo titolo, link, data e CVE estratte |
 | 11 | Associazione delle vittime | Finestra di ±14 giorni ed elenco delle forme giuridiche come in §8.2 |
-| 12 | TLS e rete nel LAB | Certificato emesso dalla CA interna Eurosystem (in alternativa la CA interna di Caddy); verificare se serve un proxy in uscita verso le fonti |
 | 13 | Provider AI (roadmap) | Scelta del provider remoto e del modello locale per CPU, da fare prima di avviare §13.4 |
-| 14 | Destinazione dei backup | Share di rete del LAB (NFS o SMB) o disco dedicato, comunque **fuori dal disco della VM**; da concordare con chi gestisce il LAB (§15) |
 
 ## 12. Riutilizzo del codice esistente e rimozione degli script legacy
 
@@ -630,7 +630,8 @@ Regole:
 - **Container `backup`** nel compose, basato sull'immagine client di PostgreSQL 16 con uno scheduler cron interno.
 - Ogni notte (default 02:30) esegue `pg_dump --format=custom` del database e produce `tip-AAAAMMGG-hhmm.dump` più un file `.sha256` di controllo.
 - Il dump viene **cifrato** (proposta: `age`) con una chiave pubblica presente sulla VM. La chiave privata **non sta sulla VM**: è custodita dal responsabile della piattaforma ed è necessaria per il ripristino.
-- **Destinazione:** un volume montato da uno storage **esterno alla VM** (share del LAB o disco dedicato, decisione aperta §11 #14). Un backup sullo stesso disco della VM non soddisfa il requisito.
+- **Destinazione:** un **disco dedicato collegato alla VM**, separato dal disco di sistema e montato in `/mnt/specula-backup` (decisione §11 #14). Il container `backup` scrive solo lì. Un backup sul disco di sistema della VM non soddisfa il requisito.
+- **Rischio residuo:** il disco dedicato protegge da guasti o corruzione del disco di sistema e del database, ma **non** dalla perdita dell'intera VM o dell'host di virtualizzazione su cui risiedono entrambi i dischi. Per l'MVP nel LAB il rischio è accettato. Prima di un uso in produzione va prevista una copia periodica fuori dall'host (es. share di rete o storage di backup del LAB).
 - **Retention:** 7 backup giornalieri + 4 settimanali (domenica), circa 30 giorni. I file più vecchi vengono eliminati dal job stesso. Questo limite garantisce anche che i dati cancellati per retention (es. Telegram, §13.3) spariscano dai backup entro 30 giorni.
 - **Obiettivi:** RPO 24 ore (si perde al massimo un giorno di dati, che i collector possono in gran parte riscaricare); RTO 2 ore.
 - **Monitoraggio:** il job registra esito, durata e dimensione in una tabella di stato. Gli Admin li vedono nella vista Fonti, nella sezione "Stato sistema" (`GET /api/v1/admin/system`). Un backup fallito o più vecchio di 26 ore viene mostrato come errore.
