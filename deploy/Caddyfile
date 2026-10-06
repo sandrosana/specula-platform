@@ -1,0 +1,39 @@
+# Specula Threat – reverse proxy (docs/architettura.md §2, decision #12).
+#
+# SPECULA_HOST              address the analysts use (default 10.128.4.106)
+# SPECULA_ALLOWED_NETWORKS  client networks allowed until M4 adds login
+#                           (space-separated CIDRs, default 10.128.4.0/24)
+
+{
+	# No public ACME: certificates come from Caddy's own local CA (self-signed root).
+	local_certs
+}
+
+{$SPECULA_HOST:10.128.4.106} {
+	tls internal
+
+	# Until M4 (authentication) only the LAB network may reach the platform.
+	@outside not remote_ip {$SPECULA_ALLOWED_NETWORKS:10.128.4.0/24}
+	respond @outside "Forbidden" 403
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		-Server
+	}
+
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	# The React frontend arrives in M5.
+	handle {
+		respond "Specula Threat – API at /api/v1/docs" 200
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
