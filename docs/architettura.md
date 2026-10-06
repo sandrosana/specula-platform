@@ -66,7 +66,7 @@
 
 | Ambito | Scelta |
 |--------|--------|
-| Ambiente di esecuzione | VM **Debian 13 (trixie)**, ultima versione stabile, nel LAB Eurosystem, indirizzo **10.128.4.106**, Docker Engine con plugin Compose. La VM **non ha GPU** e **non richiede proxy** per uscire verso internet |
+| Ambiente di esecuzione | **Macchina fisica** `cybertower` nel LAB Eurosystem, **Debian 13 (trixie)**, indirizzo **10.128.4.106**, 4 CPU, 7,6 GB di RAM, Docker Engine con plugin Compose. **Nessuna GPU**, **nessun proxy** per uscire verso internet. La macchina è **condivisa con altri utenti** (es. una condivisione Samba di un altro utente sul disco dati) |
 | Linguaggio | Python 3.12 |
 | API | FastAPI + Pydantic v2 |
 | ORM / DB | SQLAlchemy 2.0 (async) + asyncpg, PostgreSQL 16 (estensioni `pg_trgm`, `unaccent`) |
@@ -486,7 +486,7 @@ La classe è assegnata **dal collector, al momento della raccolta**, e non viene
 | 7 | Script legacy | Eliminati dopo aver creato il tag `legacy-final` (§12) |
 | 8 | Arricchimento AI | Approccio ibrido (§13.4): interfaccia comune con provider intercambiabili; provider remoto solo per dati `public`, provider locale su CPU per `internal` e `sensitive`; audit di ogni chiamata remota. Fuori MVP: nell'MVP esiste solo il campo `classification` |
 | 12 | TLS e rete nel LAB | **Certificato autofirmato** generato sulla VM dalla CA locale di Caddy (`tls internal`), valido per l'indirizzo 10.128.4.106. Per evitare l'avviso del browser, il certificato radice della CA di Caddy va installato sui PC degli analisti. Nessun proxy in uscita |
-| 14 | Destinazione dei backup | **Disco dedicato collegato alla VM**, separato dal disco di sistema e montato in `/mnt/specula-backup` (§15.1) |
+| 14 | Destinazione dei backup | Cartella dedicata `specula-backup` (root, `700`) sul **disco dati da 3,6 TB** della macchina, fisicamente separato dal disco di sistema, resa disponibile in `/mnt/specula-backup` con un bind mount (§15.1) |
 
 ### 11.2 Aperte
 
@@ -630,8 +630,13 @@ Regole:
 - **Container `backup`** nel compose, basato sull'immagine client di PostgreSQL 16 con uno scheduler cron interno.
 - Ogni notte (default 02:30) esegue `pg_dump --format=custom` del database e produce `tip-AAAAMMGG-hhmm.dump` più un file `.sha256` di controllo.
 - Il dump viene **cifrato** (proposta: `age`) con una chiave pubblica presente sulla VM. La chiave privata **non sta sulla VM**: è custodita dal responsabile della piattaforma ed è necessaria per il ripristino.
-- **Destinazione:** un **disco dedicato collegato alla VM**, separato dal disco di sistema e montato in `/mnt/specula-backup` (decisione §11 #14). Il container `backup` scrive solo lì. Un backup sul disco di sistema della VM non soddisfa il requisito.
-- **Rischio residuo:** il disco dedicato protegge da guasti o corruzione del disco di sistema e del database, ma **non** dalla perdita dell'intera VM o dell'host di virtualizzazione su cui risiedono entrambi i dischi. Per l'MVP nel LAB il rischio è accettato. Prima di un uso in produzione va prevista una copia periodica fuori dall'host (es. share di rete o storage di backup del LAB).
+- **Destinazione:** la cartella `specula-backup` sul disco dati della macchina (`/dev/sda1`, 3,6 TB, fisicamente separato dal disco di sistema), di proprietà di root con permessi `700`. È resa disponibile in **`/mnt/specula-backup`** con un bind mount in `/etc/fstab` (opzioni `nofail` e `x-systemd.requires-mounts-for`), così il percorso usato dal container non dipende da dove è montato il disco (decisione §11 #14). Il container `backup` scrive solo lì. Un backup sul disco di sistema non soddisfa il requisito.
+- **Rischi residui** (accettati per l'MVP nel LAB):
+  - il disco dati protegge da guasti o corruzione del disco di sistema e del database, ma **non** da perdita, furto, incendio o compromissione della **macchina fisica**, su cui risiedono entrambi i dischi;
+  - il disco dati ospita anche la condivisione Samba di un altro utente, la cui cartella principale è scrivibile da `nobody`. Chi accede alla condivisione **non può leggere né svuotare** `specula-backup` (root, `700`; i dump sono comunque cifrati), ma **potrebbe rinominarla o spostarla**. Il monitoraggio (sotto) segnala come errore la mancanza del backup recente;
+  - con `nofail`, se il disco dati non è disponibile all'avvio la macchina parte comunque: il job di backup deve fallire, e non scrivere sul disco di sistema, se `/mnt/specula-backup` non è un punto di montaggio.
+
+  Prima di un uso in produzione va prevista una copia periodica fuori dalla macchina (es. storage di backup del LAB).
 - **Retention:** 7 backup giornalieri + 4 settimanali (domenica), circa 30 giorni. I file più vecchi vengono eliminati dal job stesso. Questo limite garantisce anche che i dati cancellati per retention (es. Telegram, §13.3) spariscano dai backup entro 30 giorni.
 - **Obiettivi:** RPO 24 ore (si perde al massimo un giorno di dati, che i collector possono in gran parte riscaricare); RTO 2 ore.
 - **Monitoraggio:** il job registra esito, durata e dimensione in una tabella di stato. Gli Admin li vedono nella vista Fonti, nella sezione "Stato sistema" (`GET /api/v1/admin/system`). Un backup fallito o più vecchio di 26 ore viene mostrato come errore.

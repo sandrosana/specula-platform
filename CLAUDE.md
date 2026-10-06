@@ -74,6 +74,7 @@ Source of truth for scope and design:
 
 ## Environment notes
 
-- Target runtime: Debian 13 VM in the Eurosystem LAB (10.128.4.106) with Docker Engine + Compose plugin; no GPU, no outbound proxy. HTTPS via Caddy `tls internal` (self-signed local CA). Backups go to a dedicated disk mounted at `/mnt/specula-backup`.
+- Target runtime: physical machine `cybertower` (Debian 13, 10.128.4.106, 4 CPU, 7.6 GB RAM) in the Eurosystem LAB, shared with other users; Docker Engine + Compose plugin; no GPU, no outbound proxy. HTTPS via Caddy `tls internal` (self-signed local CA). Backups go to `/mnt/specula-backup` (bind mount of a root-only folder on the separate data disk); the backup job must refuse to run if that path is not a mount point.
+- Access: SSH as `sandro` with the dedicated key `~/.ssh/specula_lab` (member of `docker`, no passwordless sudo). Read-only commands are fine; ask before anything that changes the machine. Anything needing root is done by the owner.
 - The owner's Windows workstation has no Docker, Node or reliable Python. Code written there cannot be run locally: say so explicitly instead of claiming it works. Build and test on the LAB VM or in CI.
 - Legacy bash OSINT scripts (`scripts/`, `templates/`, `install.sh`) will be deleted after tagging `legacy-final` (`docs/architettura.md` §12). Do not extend them.
