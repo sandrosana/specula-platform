@@ -99,3 +99,29 @@ jobs:
           name: backend-coverage
           path: backend/coverage.xml
           if-no-files-found: ignore
+
+  images:
+    name: images
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: .
+    env:
+      # Dummy values: only used to render and validate the configuration.
+      POSTGRES_PASSWORD: ci-not-a-secret
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate compose file
+        run: docker compose --env-file .env.example -f deploy/docker-compose.yml config --quiet
+      - name: Validate Caddyfile
+        run: |
+          docker run --rm \
+            -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      - name: Build backend image
+        run: docker build -f deploy/Dockerfile.backend -t specula-backend:ci .
+      - name: Smoke test backend image
+        run: |
+          docker run --rm -e DATABASE_URL=postgresql+asyncpg://u:p@127.0.0.1:1/db specula-backend:ci \
+            python -c "from app.main import create_app; create_app(); print('app ok')"
+          docker run --rm specula-backend:ci alembic --help > /dev/null && echo "alembic ok"

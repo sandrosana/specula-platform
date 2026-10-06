@@ -1,0 +1,123 @@
+# Specula Threat – Docker Compose (docs/architettura.md §2).
+#
+# Run from the repository root:
+#   docker compose --env-file .env -f deploy/docker-compose.yml up -d --build
+#
+# Networks:
+#   public  – only the proxy; ports 80/443 are published here
+#   web     – internal: proxy <-> api
+#   data    – internal: api, scheduler, migrate <-> db (no internet access)
+# The scheduler gets outbound internet access in M2, when collectors arrive.
+
+name: specula
+
+x-backend: &backend
+  image: specula-backend:${SPECULA_VERSION:-local}
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile.backend
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  environment:
+    ENVIRONMENT: ${ENVIRONMENT:-production}
+    LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    # The password must be URL-safe (e.g. generated with `openssl rand -hex 32`).
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-specula}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@db:5432/${POSTGRES_DB:-specula}
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-specula}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-specula}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+
+  migrate:
+    <<: *backend
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    networks:
+      - data
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *backend
+    networks:
+      - web
+      - data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3).status == 200 else 1)"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  scheduler:
+    <<: *backend
+    command: ["python", "-m", "app.scheduler"]
+    networks:
+      - data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SPECULA_HOST: ${SPECULA_HOST:-10.128.4.106}
+      SPECULA_ALLOWED_NETWORKS: ${SPECULA_ALLOWED_NETWORKS:-10.128.4.0/24}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - public
+      - web
+    depends_on:
+      api:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  public:
+  web:
+    internal: true
+  data:
+    internal: true
+
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:
