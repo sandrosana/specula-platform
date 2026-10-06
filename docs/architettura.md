@@ -1,10 +1,10 @@
 # Specula Threat – Architettura
 
-> Stato: **APPROVATO – v1.2** (05/10/2026). Le decisioni ancora aperte sono elencate in §11.2.
+> Stato: **BOZZA v1.3 – modifiche al §15 in attesa di approvazione** (06/10/2026). La v1.2 resta approvata. Le decisioni ancora aperte sono elencate in §11.2.
 > Prodotto: **Specula Threat**, modulo di Threat Intelligence della piattaforma **Specula** (moduli futuri: Exposure, Third Party, OSINT, CLOSINT). Repository: `specula-platform`.
 > Documenti collegati: [specifica-funzionale-dashboard.md](specifica-funzionale-dashboard.md) · [identita-visiva.md](identita-visiva.md)
 >
-> Versioni: v1.0 approvazione iniziale · v1.1 modifica editoriale (nome del prodotto e del progetto compose), nessuna modifica tecnica · v1.2 ambiente LAB (Debian, IP, nessun proxy) e decisioni #12 (TLS) e #14 (backup).
+> Versioni: v1.0 approvazione iniziale · v1.1 modifica editoriale (nome del prodotto e del progetto compose), nessuna modifica tecnica · v1.2 ambiente LAB (Debian, IP, nessun proxy) e decisioni #12 (TLS) e #14 (backup) · v1.3 §15 dettagli di implementazione del backup (file marcatore, generazione della chiave, stato in file fino a M4, prova di ripristino in container).
 
 ---
 
@@ -627,29 +627,32 @@ Regole:
 
 ### 15.1 Backup giornaliero
 
-- **Container `backup`** nel compose, basato sull'immagine client di PostgreSQL 16 con uno scheduler cron interno.
-- Ogni notte (default 02:30) esegue `pg_dump --format=custom` del database e produce `tip-AAAAMMGG-hhmm.dump` più un file `.sha256` di controllo.
-- Il dump viene **cifrato** (proposta: `age`) con una chiave pubblica presente sulla VM. La chiave privata **non sta sulla VM**: è custodita dal responsabile della piattaforma ed è necessaria per il ripristino.
+- **Container `backup`** nel compose (`deploy/backup/`), basato sull'immagine di PostgreSQL 16 con `age`; lo script `backup.sh` attende l'orario giornaliero e lancia il dump.
+- Ogni notte (default 02:30, fuso `Europe/Rome`) esegue `pg_dump --format=custom` del database e produce `specula-AAAAMMGG-hhmm.dump.age` più un file `.sha256` di controllo.
+- Il dump viene **cifrato con `age`** mentre viene prodotto, con la chiave pubblica `BACKUP_AGE_RECIPIENT`: non esiste mai una copia in chiaro. La chiave privata **non è salvata sull'host**: è custodita dal responsabile della piattaforma ed è necessaria per il ripristino. La coppia di chiavi è stata generata in un container temporaneo sull'host, che l'ha trasmessa via SSH al PC del responsabile senza scriverla su disco: la chiave privata è passata solo per la memoria dell'host (deroga accettata, sul PC non è disponibile `age`).
+- **Protezione dal disco non montato:** il job scrive solo se nella cartella esiste il file marcatore `.specula-backup-disk`, creato una volta sul disco dati. Se il disco non è montato, `/mnt/specula-backup` è una cartella vuota sul disco di sistema, senza marcatore, e il job si rifiuta di scrivere.
 - **Destinazione:** la cartella `specula-backup` sul disco dati della macchina (`/dev/sda1`, 3,6 TB, fisicamente separato dal disco di sistema), di proprietà di root con permessi `700`. È resa disponibile in **`/mnt/specula-backup`** con un bind mount in `/etc/fstab` (opzioni `nofail` e `x-systemd.requires-mounts-for`), così il percorso usato dal container non dipende da dove è montato il disco (decisione §11 #14). Il container `backup` scrive solo lì. Un backup sul disco di sistema non soddisfa il requisito.
 - **Rischi residui** (accettati per l'MVP nel LAB):
   - il disco dati protegge da guasti o corruzione del disco di sistema e del database, ma **non** da perdita, furto, incendio o compromissione della **macchina fisica**, su cui risiedono entrambi i dischi;
   - il disco dati ospita anche la condivisione Samba di un altro utente, la cui cartella principale è scrivibile da `nobody`. Chi accede alla condivisione **non può leggere né svuotare** `specula-backup` (root, `700`; i dump sono comunque cifrati), ma **potrebbe rinominarla o spostarla**. Il monitoraggio (sotto) segnala come errore la mancanza del backup recente;
-  - con `nofail`, se il disco dati non è disponibile all'avvio la macchina parte comunque: il job di backup deve fallire, e non scrivere sul disco di sistema, se `/mnt/specula-backup` non è un punto di montaggio.
+  - con `nofail`, se il disco dati non è disponibile all'avvio la macchina parte comunque: il job di backup fallisce, senza scrivere sul disco di sistema, grazie al file marcatore.
 
   Prima di un uso in produzione va prevista una copia periodica fuori dalla macchina (es. storage di backup del LAB).
 - **Retention:** 7 backup giornalieri + 4 settimanali (domenica), circa 30 giorni. I file più vecchi vengono eliminati dal job stesso. Questo limite garantisce anche che i dati cancellati per retention (es. Telegram, §13.3) spariscano dai backup entro 30 giorni.
 - **Obiettivi:** RPO 24 ore (si perde al massimo un giorno di dati, che i collector possono in gran parte riscaricare); RTO 2 ore.
-- **Monitoraggio:** il job registra esito, durata e dimensione in una tabella di stato. Gli Admin li vedono nella vista Fonti, nella sezione "Stato sistema" (`GET /api/v1/admin/system`). Un backup fallito o più vecchio di 26 ore viene mostrato come errore.
+- **Monitoraggio:** il job registra esito, ora, file, dimensione e durata in `last-backup.json` nella cartella dei backup e nei log JSON del container. Da M4 gli Admin li vedono nella vista Fonti, nella sezione "Stato sistema" (`GET /api/v1/admin/system`), dove un backup fallito o più vecchio di 26 ore viene mostrato come errore.
 
 ### 15.2 Prova di ripristino documentata
 
 La procedura è scritta in `docs/runbook-backup.md` e prevede:
 
 1. Scelta del dump (l'ultimo, oppure uno indicato) e verifica del checksum.
-2. Decifratura con la chiave privata.
-3. Ripristino con `pg_restore` in un container PostgreSQL **temporaneo e separato** (`db-restore-test`), mai sul database in uso.
-4. Verifica: `alembic current` uguale alla versione attesa, conteggio delle righe delle tabelle principali confrontato con il database in uso (script `deploy/backup/verify-restore.sh`) e alcune query di controllo (es. una CVE e una voce KEV note).
+2. Decifratura con la chiave privata, passata al container tramite lo standard input e mai scritta su disco.
+3. Ripristino con `pg_restore` in un PostgreSQL **temporaneo** avviato in memoria dentro un container usa-e-getta (`deploy/backup/verify-restore.sh`), mai sul database in uso.
+4. Verifica: versione delle migrazioni (`alembic_version`) uguale a quella del database in uso, presenza di tutte le tabelle e confronto del numero di righe per tabella. Da M2, quando ci saranno dati, si aggiungono query di controllo (es. una CVE e una voce KEV note).
 5. Eliminazione del container temporaneo.
 6. **Registrazione** della prova nel registro in fondo al runbook: data, dump usato, durata, esito ed eventuali problemi.
+
+Lo stesso flusso (rifiuto senza marcatore, dump cifrato, ripristino con la chiave giusta, fallimento con una chiave sbagliata) è verificato a ogni PR dal job CI `images`.
 
 **Quando si fa:** al primo avvio sulla VM (criterio di completamento della milestone che introduce il backup), poi **una volta al mese** e dopo ogni aggiornamento di versione di PostgreSQL.

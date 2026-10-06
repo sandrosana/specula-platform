@@ -9,6 +9,7 @@ Docker Compose deployment on the LAB host (see `docs/architettura.md` §2, §3 a
 | `scheduler` | Collectors (empty until M2) | `data` |
 | `migrate` | One-shot `alembic upgrade head` before `api` and `scheduler` start | `data` |
 | `db` | PostgreSQL 16, data in the `db-data` volume | `data` |
+| `backup` | Daily encrypted `pg_dump` to `/mnt/specula-backup` (see [docs/runbook-backup.md](../docs/runbook-backup.md)) | `data` |
 
 `web` and `data` are internal networks: the database and the backend have no internet access and are reachable only through the proxy.
 
@@ -49,6 +50,10 @@ docker compose --env-file .env -f deploy/docker-compose.yml cp proxy:/data/caddy
 ```
 
 Then import `specula-root.crt` as a trusted root certification authority (on Windows: double-click → Install certificate → Local machine → "Trusted Root Certification Authorities"). The root is valid for 10 years; the server certificate is renewed automatically.
+
+## Backups
+
+Set `BACKUP_AGE_RECIPIENT` in `.env` and create the marker file on the backup disk once (as root): `touch /mnt/specula-backup/.specula-backup-disk`. Procedures for manual backups and restore tests: [docs/runbook-backup.md](../docs/runbook-backup.md).
 
 ## Logs
 
