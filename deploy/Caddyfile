@@ -7,6 +7,9 @@
 {
 	# No public ACME: certificates come from Caddy's own local CA (self-signed root).
 	local_certs
+	# Clients that connect by IP address (e.g. Windows/Schannel) send no SNI:
+	# without this, Caddy has no certificate to offer and aborts the handshake.
+	default_sni {$SPECULA_HOST:10.128.4.106}
 }
 
 {$SPECULA_HOST:10.128.4.106} {
