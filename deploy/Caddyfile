@@ -15,10 +15,6 @@
 {$SPECULA_HOST:10.128.4.106} {
 	tls internal
 
-	# Until M4 (authentication) only the LAB network may reach the platform.
-	@outside not remote_ip {$SPECULA_ALLOWED_NETWORKS:10.128.4.0/24}
-	respond @outside "Forbidden" 403
-
 	header {
 		X-Content-Type-Options nosniff
 		X-Frame-Options DENY
@@ -26,12 +22,17 @@
 		-Server
 	}
 
-	handle /api/* {
-		reverse_proxy api:8000
-	}
+	# `route` runs its directives in the order written. Outside a route Caddy
+	# re-sorts directives (handle/reverse_proxy before respond), which would let
+	# requests through before the network check. The CI images job tests this.
+	route {
+		# Until M4 (authentication) only the LAB network may reach the platform.
+		@outside not remote_ip {$SPECULA_ALLOWED_NETWORKS:10.128.4.0/24}
+		respond @outside "Forbidden" 403
 
-	# The React frontend arrives in M5.
-	handle {
+		reverse_proxy /api/* api:8000
+
+		# The React frontend arrives in M5.
 		respond "Specula Threat – API at /api/v1/docs" 200
 	}
 
