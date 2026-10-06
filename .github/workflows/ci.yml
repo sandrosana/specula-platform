@@ -109,6 +109,7 @@ jobs:
     env:
       # Dummy values: only used to render and validate the configuration.
       POSTGRES_PASSWORD: ci-not-a-secret
+      BACKUP_AGE_RECIPIENT: age1ci0000000000000000000000000000000000000000000000000000000
     steps:
       - uses: actions/checkout@v4
       - name: Validate compose file
@@ -156,6 +157,62 @@ jobs:
       - name: Clean up proxy test
         if: always()
         run: docker rm -f ci-caddy ci-api > /dev/null 2>&1 || true
+
+      - name: Lint backup scripts
+        run: shellcheck deploy/backup/*.sh
+      - name: Build backup image
+        run: docker build -t specula-backup:local deploy/backup
+      - name: Test backup and restore
+        run: |
+          set -euo pipefail
+          docker network create specula_data
+          docker run -d --name db --network specula_data \
+            -e POSTGRES_USER=specula -e POSTGRES_PASSWORD=ci-pass -e POSTGRES_DB=specula postgres:16 > /dev/null
+          for _ in $(seq 60); do docker exec db pg_isready -U specula -d specula > /dev/null 2>&1 && break; sleep 1; done
+          docker exec db psql -U specula -d specula -q -c \
+            "create table alembic_version (version_num varchar(32) primary key); insert into alembic_version values ('0001');
+             create table probe (id int); insert into probe select generate_series(1, 100);"
+
+          keys="$(docker run --rm specula-backup:local age-keygen 2> /dev/null)"
+          recipient="$(printf '%s\n' "$keys" | sed -n 's/^# public key: //p')"
+          backups="$(mktemp -d)"
+          run_backup() {
+            docker run --rm --network specula_data -v "$backups:/backups" \
+              -e PGHOST=db -e PGUSER=specula -e PGPASSWORD=ci-pass -e PGDATABASE=specula \
+              -e BACKUP_AGE_RECIPIENT="$recipient" specula-backup:local backup.sh now
+          }
+          restore_test() {
+            docker run --rm -i --network specula_data --tmpfs /tmp:rw,size=512m -v "$backups:/backups:ro" \
+              -e LIVE_PGHOST=db -e LIVE_PGUSER=specula -e LIVE_PGDATABASE=specula -e LIVE_PGPASSWORD=ci-pass \
+              specula-backup:local restore-test.sh latest
+          }
+
+          echo "--- without the disk marker the backup must refuse to write"
+          if run_backup; then echo "backup ran without the marker"; exit 1; fi
+          [ -z "$(ls -A "$backups")" ] || { echo "files written without the marker"; exit 1; }
+
+          echo "--- with the marker: encrypted dump, checksum, status"
+          touch "$backups/.specula-backup-disk"
+          run_backup
+          dump="$(find "$backups" -name 'specula-*.dump.age' | head -n 1)"
+          if [ -z "$dump" ] || [ ! -f "$dump.sha256" ] || [ ! -f "$backups/last-backup.json" ]; then
+            echo "dump, checksum or status file missing"; exit 1
+          fi
+          if head -c 5 "$dump" | grep -q PGDMP; then echo "dump is not encrypted"; exit 1; fi
+          grep -q '"outcome": "success"' "$backups/last-backup.json"
+
+          echo "--- restore with the right key"
+          out="$(printf '%s\n' "$keys" | restore_test)"
+          echo "$out"
+          grep -q '^RESULT: OK' <<< "$out"
+
+          echo "--- restore with a wrong key must fail"
+          wrong="$(docker run --rm specula-backup:local age-keygen 2> /dev/null)"
+          if printf '%s\n' "$wrong" | restore_test; then echo "restore succeeded with a wrong key"; exit 1; fi
+          echo "backup and restore OK"
+      - name: Clean up backup test
+        if: always()
+        run: docker rm -f db > /dev/null 2>&1 || true
 
       - name: Build backend image
         run: docker build -f deploy/Dockerfile.backend -t specula-backend:ci .

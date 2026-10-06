@@ -50,6 +50,38 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  backup:
+    image: specula-backup:${SPECULA_VERSION:-local}
+    build:
+      context: ./backup
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      TZ: ${TZ:-Europe/Rome}
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-specula}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      PGDATABASE: ${POSTGRES_DB:-specula}
+      BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT:?BACKUP_AGE_RECIPIENT must be set in .env}
+      BACKUP_TIME: ${BACKUP_TIME:-02:30}
+      BACKUP_KEEP_DAILY: ${BACKUP_KEEP_DAILY:-7}
+      BACKUP_KEEP_WEEKLY: ${BACKUP_KEEP_WEEKLY:-4}
+    volumes:
+      # Root-only folder on the data disk (decision #14). backup.sh refuses to
+      # write if the marker file is missing, i.e. the disk is not mounted.
+      - ${BACKUP_HOST_DIR:-/mnt/specula-backup}:/backups
+    networks:
+      - data
+    depends_on:
+      db:
+        condition: service_healthy
+
   migrate:
     <<: *backend
     command: ["alembic", "upgrade", "head"]
