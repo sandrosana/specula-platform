@@ -23,7 +23,7 @@ from app.core.config import Settings
 
 # Framework modules: not collectors.
 _FRAMEWORK_MODULES = frozenset(
-    {"__main__", "base", "http", "registry", "runner", "storage", "writers"}
+    {"__main__", "base", "http", "registry", "runner", "status", "storage", "writers"}
 )
 _DURATION = re.compile(r"^(\d+)\s*([smhd])$")
 _UNITS = {"s": "seconds", "m": "minutes", "h": "hours", "d": "days"}
