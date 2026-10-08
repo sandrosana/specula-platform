@@ -32,19 +32,31 @@ def make_settings(collector_env: dict[str, str] | None = None) -> Settings:
     )
 
 
+def scheduled_test_jobs(settings: Settings) -> list[JobSpec]:
+    """Jobs of the test collectors only (real collectors are registered too)."""
+    return [job for job in plan_jobs(settings) if job.collector.startswith("test_")]
+
+
 @pytest.mark.usefixtures("registered")
 def test_only_enabled_collectors_are_scheduled() -> None:
-    jobs = plan_jobs(make_settings())
-
     # KeyedCollector has no OTX_API_KEY: disabled, not scheduled.
-    assert jobs == [JobSpec("test_scripted", Interval(timedelta(hours=1)))]
+    assert scheduled_test_jobs(make_settings()) == [
+        JobSpec("test_scripted", Interval(timedelta(hours=1)))
+    ]
 
 
 @pytest.mark.usefixtures("registered")
 def test_schedule_override_is_applied() -> None:
-    jobs = plan_jobs(make_settings({"COLLECTOR_TEST_SCRIPTED_SCHEDULE": "15 6 * * *"}))
+    settings = make_settings({"COLLECTOR_TEST_SCRIPTED_SCHEDULE": "15 6 * * *"})
 
-    assert jobs == [JobSpec("test_scripted", Cron("15 6 * * *"))]
+    assert scheduled_test_jobs(settings) == [JobSpec("test_scripted", Cron("15 6 * * *"))]
+
+
+def test_real_collectors_can_be_disabled() -> None:
+    jobs = plan_jobs(make_settings({"COLLECTOR_CISA_KEV_ENABLED": "false"}))
+
+    assert "cisa_kev" not in [job.collector for job in jobs]
+    assert "cisa_kev" in [job.collector for job in plan_jobs(make_settings())]
 
 
 def test_make_trigger() -> None:

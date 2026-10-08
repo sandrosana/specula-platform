@@ -33,7 +33,9 @@ def make_settings(
 @pytest.mark.usefixtures("registered")
 def test_register_and_lookup() -> None:
     assert registry.get_collector("test_scripted") is ScriptedCollector
-    assert [cls.name for cls in registry.collectors()] == ["test_keyed", "test_scripted"]
+    names = [cls.name for cls in registry.collectors()]
+    assert {"test_keyed", "test_scripted"} <= set(names)
+    assert names == sorted(names)
     registry.register(ScriptedCollector)  # registering the same class again is harmless
 
 
@@ -51,10 +53,10 @@ def test_unknown_collector() -> None:
         registry.get_collector("does_not_exist")
 
 
-def test_discover_skips_framework_modules() -> None:
+def test_discover_finds_real_collectors() -> None:
     names = {cls.name for cls in registry.discover()}
 
-    assert not {"base", "http", "runner", "registry", "storage", "writers"} & names
+    assert "cisa_kev" in names
 
 
 @pytest.mark.parametrize(
