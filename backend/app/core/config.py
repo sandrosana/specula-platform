@@ -29,6 +29,9 @@ class Settings(BaseSettings):
 
     database_url: SecretStr
 
+    # Outbound proxy for collectors; empty in the current LAB (no proxy).
+    https_proxy: str | None = None
+
     @field_validator("log_level", mode="before")
     @classmethod
     def _uppercase_log_level(cls, value: object) -> object:

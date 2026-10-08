@@ -20,6 +20,12 @@ def _test_environment(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
 
 @pytest.fixture
+def anyio_backend() -> str:
+    """Async tests (@pytest.mark.anyio) run on asyncio."""
+    return "asyncio"
+
+
+@pytest.fixture
 def settings() -> Settings:
     return Settings(environment="test", log_level="WARNING")
 
