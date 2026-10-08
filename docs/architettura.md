@@ -1,10 +1,10 @@
 # Specula Threat – Architettura
 
-> Stato: **APPROVATO – v1.3** (08/10/2026). Le decisioni ancora aperte sono elencate in §11.2.
+> Stato: **BOZZA v1.4 – modifiche a §6.1, §6.2, §8.1, §11 in attesa di approvazione** (08/10/2026). La v1.3 resta approvata. Le decisioni ancora aperte sono elencate in §11.2.
 > Prodotto: **Specula Threat**, modulo di Threat Intelligence della piattaforma **Specula** (moduli futuri: Exposure, Third Party, OSINT, CLOSINT). Repository: `specula-platform`.
 > Documenti collegati: [specifica-funzionale-dashboard.md](specifica-funzionale-dashboard.md) · [identita-visiva.md](identita-visiva.md)
 >
-> Versioni: v1.0 approvazione iniziale · v1.1 modifica editoriale (nome del prodotto e del progetto compose), nessuna modifica tecnica · v1.2 ambiente LAB (Debian, IP, nessun proxy) e decisioni #12 (TLS) e #14 (backup) · v1.3 §15 dettagli di implementazione del backup (file marcatore, generazione della chiave, stato in file fino a M4, prova di ripristino in container).
+> Versioni: v1.0 approvazione iniziale · v1.1 modifica editoriale (nome del prodotto e del progetto compose), nessuna modifica tecnica · v1.2 ambiente LAB (Debian, IP, nessun proxy) e decisioni #12 (TLS) e #14 (backup) · v1.3 §15 dettagli di implementazione del backup (file marcatore, generazione della chiave, stato in file fino a M4, prova di ripristino in container) · v1.4 NVD ed EPSS verificati sulle fonti ufficiali (endpoint, limiti, licenze); EPSS: punteggio attuale più storico delle sole variazioni rilevanti, uso commerciale "Sì" con attribuzione.
 
 ---
 
@@ -246,9 +246,9 @@ class PostProcessor(ABC):
 
 | Fonte | Collector | Dati | Accesso | Schedule | TTL cache | Strategia |
 |-------|-----------|------|---------|----------|-----------|-----------|
-| **NVD** (CVE API 2.0) | `nvd` | CVE, CVSS, CWE, CPE, riferimenti | Chiave opzionale `NVD_API_KEY` (alza il rate limit) | ogni 2h | 1h | Incrementale su `lastModStartDate`/`lastModEndDate` (finestra max 120 giorni), paginazione. Backfill iniziale da CLI. |
+| **NVD** (CVE API 2.0) ✔ verificato | `nvd` | CVE, CVSS (v4.0, v3.x, v2), CWE, CPE e prodotti affetti, riferimenti | `https://services.nvd.nist.gov/rest/json/cves/2.0`. Chiave opzionale `NVD_API_KEY`, inviata nell'header `apiKey`: alza il limite da 5 a 50 richieste ogni 30 s | ogni 2h (NVD chiede di non sincronizzare più spesso) | 1h | Primo caricamento: tutte le pagine con `startIndex` da 0 e `resultsPerPage` predefinito (2.000). Poi incrementale con `lastModStartDate` = ultimo `lastModified` ricevuto e `lastModEndDate` = ora (finestra max 120 giorni). Pausa di 6 s tra le richieste anche con la chiave, come raccomandato da NVD. Le CVE respinte (`Rejected`) restano, con il loro stato. Le metriche SSVC di CISA si ignorano. |
 | **CISA KEV** | `cisa_kev` | Catalogo KEV | Pubblico | ogni 6h | 3h | Feed JSON completo, diff con lo stato attuale. |
-| **EPSS** (FIRST) | `epss` | Punteggio e percentile giornalieri | Pubblico | giornaliera | 12h | Bulk CSV giornaliero, storico conservato. |
+| **EPSS** (FIRST) ✔ verificato | `epss` | Punteggio, percentile, versione del modello | CSV giornaliero `https://epss.empiricalsecurity.com/epss_scores-current.csv.gz` (redirect al file del giorno). L'API FIRST è pensata solo per consultazioni puntuali e non si usa per la sincronizzazione | giornaliera, dopo la pubblicazione (~13:30 UTC) | 12h | Punteggio attuale per ogni CVE (~385.000 righe); nello storico solo le variazioni rilevanti (§8.1). Versione del modello e data del punteggio si leggono dalla riga di commento del CSV. |
 | **ransomware.live** (API PRO) | `ransomware_live` | Gruppi, vittime (paese, settore, dominio, date) | **Chiave obbligatoria** `RANSOMWARE_LIVE_API_KEY` (`required_settings`), ottenuta da `my.ransomware.live`. Base URL `https://api-pro.ransomware.live`, documentazione `api-pro.ransomware.live/docs`. **L'API v2 gratuita senza chiave non si usa**: è dichiarata solo per uso personale. | ogni 1h | 30m | Vittime recenti e gruppi → entità vittima + avvistamento (§8.2). |
 | **abuse.ch** | `abusech.urlhaus`, `abusech.threatfox`, `abusech.malwarebazaar`, `abusech.feodo` | URL, IOC, metadati e hash dei campioni, C2 | Auth-Key `ABUSECH_AUTH_KEY` | 30m–1h | 15–30m | Export recenti, upsert IOC con avvistamenti per fonte. |
 | **AlienVault OTX** | `otx` | Pulse sottoscritti e indicatori | Chiave obbligatoria `OTX_API_KEY` | ogni 1h | 30m | Pulse modificati dopo il cursore. |
@@ -263,9 +263,9 @@ Questi valori finiscono nei metadati `SourceLicense` di ogni collector e vengono
 
 | Fonte | Licenza / termini | Uso commerciale | Quota dichiarata | Attribuzione | Note |
 |-------|-------------------|-----------------|------------------|--------------|------|
-| NVD | Termini d'uso NVD (servizio del governo USA) | **Sì** | 5 richieste / 30 s senza chiave, 50 / 30 s con chiave | "This product uses the NVD API but is not endorsed or certified by the NVD." | Riverificare testo e limiti sulla pagina sviluppatori NVD |
+| NVD | Pubblico dominio (Title 17 U.S.C.), verificato l'08/10/2026 | **Sì** | 5 richieste / 30 s senza chiave, 50 / 30 s con chiave | **Obbligatoria**: "This product uses data from the NVD API but is not endorsed or certified by the NVD." | Il nome NVD si può usare per indicare la fonte, non per suggerire un'approvazione |
 | CISA KEV | **CC0 1.0 Universal** (verificato l'08/10/2026 su cisa.gov) | **Sì** | Nessuna | Non richiesta | Vietato usare logo CISA e sigillo DHS; l'uso dei dati non implica approvazione di CISA/DHS. Feed JSON unico (~1,7 MB); il server invia ETag e Last-Modified ma ha risposto 200 anche a una richiesta condizionale: le richieste ripetute le evita la cache con TTL |
-| EPSS | Dati pubblicati liberamente da FIRST | **Da verificare** | Non dichiarata | Da verificare | La pagina EPSS non indica una licenza esplicita: vanno letti i termini dei servizi FIRST |
+| EPSS | Pubblicazione libera, senza registrazione (FAQ FIRST, verificata l'08/10/2026) | **Sì**, con attribuzione | Nessuna per il CSV giornaliero | Richiesta: "EPSS scores from FIRST.org (https://www.first.org/epss), generated by Empirical Security." | Nessuna licenza formale: la FAQ dichiara l'uso libero e chiede l'attribuzione nei prodotti |
 | ransomware.live PRO | Termini e condizioni ransomware.live | **Sì**, dopo aver accettato i T&C | **Da riverificare** sulla pagina ufficiale dell'API PRO e nei T&C: sono emersi valori discordanti (500.000 chiamate/mese e 3.000 chiamate/giorno). Fino alla verifica il collector applica il limite più restrittivo (3.000/giorno) | Da verificare nei T&C | La pagina API indica la PRO (gratuita) per l'uso aziendale. T&C da leggere prima di attivare la chiave |
 | abuse.ch | Termini d'uso abuse.ch / Spamhaus | **Da verificare** | Limiti di query per gli utenti non commerciali (non numerici) | Da verificare | I termini prevedono che l'uso da parte di aziende con finalità commerciali o di profitto *possa* richiedere un abbonamento a pagamento gestito da Spamhaus. Va chiarito se l'uso interno difensivo di Eurosystem rientra |
 | AlienVault OTX | EULA OTX (LevelBlue) | **Da verificare** | 10.000 richieste/ora con chiave (dato da fonte secondaria, da confermare) | — | L'EULA dichiara OTX gratuito "per uso non commerciale" e vieta la redistribuzione. L'uso interno difensivo sembra compatibile, ma va confermato |
@@ -302,7 +302,8 @@ Tutte le tabelle di entità, avvistamenti ed eventi hanno la colonna `classifica
 | `vulnerabilities` | `cve_id` | descrizione, published/modified, CVSS v3/v4, CWE, stato NVD, `priority_level` (P1–P4) e `priority_reason` calcolati |
 | `vulnerability_products` | (cve, vendor, product) | da CPE |
 | `kev_entries` | `cve_id` | vendor, product, date_added, due_date, ransomware_use, required_action |
-| `epss_scores` | (cve_id, date) | epss, percentile |
+| `epss_scores` | `cve_id` | punteggio **attuale**: epss, percentile, data del punteggio, versione del modello |
+| `epss_history` | (cve_id, score_date) | solo **variazioni rilevanti**: prima comparsa, variazione di almeno 0,01, attraversamento della soglia `EPSS_THRESHOLD` o cambio di versione del modello |
 | `ransomware_groups` | `slug` | nome, alias, prima e ultima attività |
 | `ransomware_victims` | `id` | entità vittima canonica (§8.2) |
 | `victim_sightings` | (source, source_record_id) | avvistamenti della vittima per fonte (§8.2) |
@@ -481,7 +482,7 @@ La classe è assegnata **dal collector, al momento della raccolta**, e non viene
 | 2 | Cache | Tabella PostgreSQL `http_cache` |
 | 3 | Geolocalizzazione IP | Paese indicato dalla fonte quando presente; GeoLite2 (MaxMind) opzionale con `MAXMIND_LICENSE_KEY` |
 | 4 | Ordinamento CVE | Livelli P1–P4 (specifica §6) al posto del punteggio pesato |
-| 5 | Retention | Eventi e IOC 12 mesi, storico EPSS 6 mesi, CVE e KEV senza scadenza |
+| 5 | Retention | Eventi e IOC 12 mesi, storico EPSS (solo variazioni rilevanti, §8.1) 6 mesi, CVE e KEV senza scadenza |
 | 6 | Autenticazione | Utenti locali nell'MVP; Entra ID (OIDC) come primo sviluppo successivo |
 | 7 | Script legacy | Eliminati dopo aver creato il tag `legacy-final` (§12) |
 | 8 | Arricchimento AI | Approccio ibrido (§13.4): interfaccia comune con provider intercambiabili; provider remoto solo per dati `public`, provider locale su CPU per `internal` e `sensitive`; audit di ogni chiamata remota. Fuori MVP: nell'MVP esiste solo il campo `classification` |
@@ -492,7 +493,7 @@ La classe è assegnata **dal collector, al momento della raccolta**, e non viene
 
 | # | Tema | Proposta |
 |---|------|----------|
-| 9 | Fonti con uso commerciale "Da verificare" (abuse.ch, OTX, EPSS, CSIRT Italia) | Attive solo nel LAB, in fase di valutazione; prima di qualunque uso in produzione la verifica va chiusa e la tabella §6.2 aggiornata |
+| 9 | Fonti con uso commerciale "Da verificare" (abuse.ch, OTX, CSIRT Italia) | Attive solo nel LAB, in fase di valutazione; prima di qualunque uso in produzione la verifica va chiusa e la tabella §6.2 aggiornata |
 | 10 | CSIRT Italia | Chiedere ad ACN conferma scritta sul riuso del feed MISP e degli avvisi RSS in una piattaforma interna; fino ad allora, per gli avvisi solo titolo, link, data e CVE estratte |
 | 11 | Associazione delle vittime | Finestra di ±14 giorni ed elenco delle forme giuridiche come in §8.2 |
 | 13 | Provider AI (roadmap) | Scelta del provider remoto e del modello locale per CPU, da fare prima di avviare §13.4 |

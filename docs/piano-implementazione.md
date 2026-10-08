@@ -255,7 +255,7 @@
 **Criterio di completamento**
 - Un IOC presente in più fonti è una sola entità con più avvistamenti.
 - Un evento MISP con TLP diverso da CLEAR riceve la classe corretta; un TLP:RED non viene acquisito (test).
-- La vista Fonti mostra abuse.ch, OTX, EPSS e CSIRT Italia come "Da verificare" (criterio di accettazione 7).
+- La vista Fonti mostra abuse.ch, OTX e CSIRT Italia come "Da verificare" (criterio di accettazione 7).
 
 ---
 

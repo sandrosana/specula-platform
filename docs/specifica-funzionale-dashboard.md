@@ -261,7 +261,7 @@ Il livello si ricalcola a ogni aggiornamento di KEV o EPSS. Un cambio di livello
 4. Cambiando periodo, tutti i widget si aggiornano in modo coerente.
 5. Un Analyst crea il topic "Sanità Italia", lo condivide e un Viewer lo vede; il feed globale evidenzia gli eventi corrispondenti per chi lo segue.
 6. Un Viewer non può creare topic né forzare run; un Admin sì, e l'azione compare nell'audit log.
-7. La vista Fonti mostra per ogni collector licenza, uso commerciale e quota; abuse.ch, AlienVault OTX, EPSS e CSIRT Italia risultano "Da verificare" finché le condizioni non sono confermate.
+7. La vista Fonti mostra per ogni collector licenza, uso commerciale e quota; abuse.ch, AlienVault OTX e CSIRT Italia risultano "Da verificare" finché le condizioni non sono confermate.
 8. Senza `RANSOMWARE_LIVE_API_KEY` il collector ransomware.live risulta disabilitato e la piattaforma non usa l'API v2 gratuita.
 9. Il dettaglio di una CVE in KEV con uso ransomware mostra livello P1 e il motivo; la stessa CVE è prima del pannello "CVE prioritarie" rispetto a una CVE con solo EPSS alto.
 10. Una vittima segnalata da due fonti compare una sola volta, con entrambe le fonti elencate.
