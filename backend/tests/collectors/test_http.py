@@ -303,6 +303,15 @@ def test_cache_key_ignores_parameter_order_and_method_case() -> None:
 
 
 @pytest.mark.anyio
+async def test_http_client_with_empty_proxy_variable(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Regression: HTTPS_PROXY= (empty, as in .env.example) crashed the scheduler at startup.
+    monkeypatch.setenv("HTTPS_PROXY", "")
+
+    async with create_http_client(Settings()) as client:
+        assert client.trust_env is False
+
+
+@pytest.mark.anyio
 async def test_http_client_takes_proxy_only_from_settings() -> None:
     settings = Settings(
         environment="test",
