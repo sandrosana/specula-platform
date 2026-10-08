@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from collections.abc import Iterator
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from apscheduler.triggers.cron import CronTrigger
@@ -11,7 +11,7 @@ from pydantic import SecretStr
 from app.collectors import registry
 from app.collectors.base import Cron, Interval
 from app.core.config import Settings
-from app.scheduler.main import JobSpec, make_trigger, plan_jobs, run
+from app.scheduler.main import JobSpec, first_run_time, make_trigger, plan_jobs, run
 from tests.collectors.scripted import KeyedCollector, ScriptedCollector
 
 
@@ -57,6 +57,25 @@ def test_real_collectors_can_be_disabled() -> None:
 
     assert "cisa_kev" not in [job.collector for job in jobs]
     assert "cisa_kev" in [job.collector for job in plan_jobs(make_settings())]
+
+
+NOW = datetime(2026, 10, 8, 16, 0, tzinfo=UTC)
+SIX_HOURS = Interval(timedelta(hours=6))
+
+
+def test_first_run_resumes_from_last_success() -> None:
+    last = NOW - timedelta(hours=2)
+
+    assert first_run_time(SIX_HOURS, last, NOW) == last + timedelta(hours=6)
+
+
+def test_first_run_is_immediate_when_overdue_or_never_run() -> None:
+    assert first_run_time(SIX_HOURS, NOW - timedelta(hours=9), NOW) == NOW
+    assert first_run_time(SIX_HOURS, None, NOW) == NOW
+
+
+def test_cron_schedules_keep_their_fixed_times() -> None:
+    assert first_run_time(Cron("15 6 * * *"), NOW - timedelta(days=3), NOW) is None
 
 
 def test_make_trigger() -> None:
