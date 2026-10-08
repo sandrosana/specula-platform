@@ -51,6 +51,17 @@ docker compose --env-file .env -f deploy/docker-compose.yml cp proxy:/data/caddy
 
 Then import `specula-root.crt` as a trusted root certification authority (on Windows: double-click → Install certificate → Local machine → "Trusted Root Certification Authorities"). The root is valid for 10 years; the server certificate is renewed automatically.
 
+## Collectors
+
+The `scheduler` runs every enabled collector on its schedule. It is the only service with outbound internet access (`egress` network) and the only one that receives the source API keys from `.env`.
+
+```bash
+# list collectors, their configuration and why a collector is disabled
+docker compose --env-file .env -f deploy/docker-compose.yml exec scheduler python -m app.collectors list
+# run one collector now (--full ignores the saved cursor, --no-cache ignores the HTTP cache)
+docker compose --env-file .env -f deploy/docker-compose.yml exec scheduler python -m app.collectors run <name>
+```
+
 ## Backups
 
 Set `BACKUP_AGE_RECIPIENT` in `.env` and create the marker file on the backup disk once (as root): `touch /mnt/specula-backup/.specula-backup-disk`. Procedures for manual backups and restore tests: [docs/runbook-backup.md](../docs/runbook-backup.md).

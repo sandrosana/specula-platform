@@ -1,23 +1,71 @@
 import asyncio
 import logging
+from collections.abc import Iterator
+from datetime import timedelta
 
 import pytest
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
+from pydantic import SecretStr
 
-from app.scheduler.main import run
+from app.collectors import registry
+from app.collectors.base import Cron, Interval
+from app.core.config import Settings
+from app.scheduler.main import JobSpec, make_trigger, plan_jobs, run
+from tests.collectors.scripted import KeyedCollector, ScriptedCollector
+
+
+@pytest.fixture
+def registered() -> Iterator[None]:
+    registry.register(ScriptedCollector)
+    registry.register(KeyedCollector)
+    yield
+    registry.unregister(ScriptedCollector.name)
+    registry.unregister(KeyedCollector.name)
+
+
+def make_settings(collector_env: dict[str, str] | None = None) -> Settings:
+    return Settings(
+        environment="test",
+        database_url=SecretStr("postgresql+asyncpg://u:p@127.0.0.1:1/d"),
+        collector_env=collector_env or {},
+    )
+
+
+@pytest.mark.usefixtures("registered")
+def test_only_enabled_collectors_are_scheduled() -> None:
+    jobs = plan_jobs(make_settings())
+
+    # KeyedCollector has no OTX_API_KEY: disabled, not scheduled.
+    assert jobs == [JobSpec("test_scripted", Interval(timedelta(hours=1)))]
+
+
+@pytest.mark.usefixtures("registered")
+def test_schedule_override_is_applied() -> None:
+    jobs = plan_jobs(make_settings({"COLLECTOR_TEST_SCRIPTED_SCHEDULE": "15 6 * * *"}))
+
+    assert jobs == [JobSpec("test_scripted", Cron("15 6 * * *"))]
+
+
+def test_make_trigger() -> None:
+    assert isinstance(make_trigger(Cron("15 6 * * *"), "Europe/Rome"), CronTrigger)
+    interval = make_trigger(Interval(timedelta(hours=2)), "Europe/Rome")
+    assert isinstance(interval, IntervalTrigger)
+    assert interval.interval == timedelta(hours=2)
 
 
 def test_run_returns_when_stopped(caplog: pytest.LogCaptureFixture) -> None:
     async def scenario() -> None:
         stop = asyncio.Event()
-        task = asyncio.create_task(run(stop))
+        task = asyncio.create_task(run(stop, make_settings()))
         await asyncio.sleep(0)
         assert not task.done()
         stop.set()
-        await asyncio.wait_for(task, timeout=1)
+        await asyncio.wait_for(task, timeout=5)
 
     with caplog.at_level(logging.INFO, logger="app.scheduler.main"):
         asyncio.run(scenario())
 
     messages = [record.getMessage() for record in caplog.records]
-    assert "scheduler started: no collectors registered yet" in messages
+    assert any(message.startswith("scheduler started") for message in messages)
     assert "scheduler stopped" in messages

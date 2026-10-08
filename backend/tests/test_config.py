@@ -62,6 +62,29 @@ def test_database_url_must_use_asyncpg(monkeypatch: pytest.MonkeyPatch) -> None:
     assert SECRET_PASSWORD not in str(error.value)
 
 
+def test_source_secrets_returns_only_configured_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OTX_API_KEY", "otx-value")
+    monkeypatch.setenv("NVD_API_KEY", "")
+
+    settings = Settings()
+
+    assert settings.source_secrets(["OTX_API_KEY", "NVD_API_KEY", "UNKNOWN_KEY"]) == {
+        "OTX_API_KEY": "otx-value"
+    }
+    assert "otx-value" not in repr(settings)
+
+
+def test_collector_options_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("COLLECTOR_ABUSECH_THREATFOX_ENABLED", "false")
+    monkeypatch.setenv("COLLECTOR_NVD_SCHEDULE", " ")
+
+    settings = Settings()
+
+    assert settings.collector_option("abusech.threatfox", "enabled") == "false"
+    assert settings.collector_option("nvd", "schedule") is None
+    assert settings.collector_option("cisa_kev", "enabled") is None
+
+
 def test_database_url_is_not_exposed(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATABASE_URL", SECRET_ASYNCPG_URL)
 
