@@ -29,5 +29,10 @@ class KevEntryRow(ClassifiedMixin, Base):
     catalog_version: Mapped[str] = mapped_column(String(32))
     # Source record as received, to re-normalize without downloading again.
     raw: Mapped[dict[str, Any]] = mapped_column(JSONB)
+
+    @property
+    def ransomware_known(self) -> bool:
+        return self.known_ransomware_campaign_use == "Known"
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

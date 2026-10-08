@@ -41,6 +41,14 @@ class CollectorState(Base):
     last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Listener heartbeat (roadmap, docs/architettura.md §5.3).
     heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Effective configuration published by the scheduler, which is the only
+    # process holding the source keys: the API reads it from here.
+    enabled: Mapped[bool | None] = mapped_column(Boolean)
+    disabled_reason: Mapped[str | None] = mapped_column(Text)
+    configured: Mapped[bool | None] = mapped_column(Boolean)
+    schedule: Mapped[str | None] = mapped_column(String(64))
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    config_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class HttpCacheEntry(ClassifiedMixin, Base):
