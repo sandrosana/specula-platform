@@ -74,6 +74,17 @@ def test_source_secrets_returns_only_configured_values(monkeypatch: pytest.Monke
     assert "otx-value" not in repr(settings)
 
 
+def test_empty_optional_variables_mean_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    # As written by .env.example: HTTPS_PROXY= and empty source keys.
+    monkeypatch.setenv("HTTPS_PROXY", "")
+    monkeypatch.setenv("OTX_API_KEY", " ")
+
+    settings = Settings()
+
+    assert settings.https_proxy is None
+    assert settings.otx_api_key is None
+
+
 def test_collector_options_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("COLLECTOR_ABUSECH_THREATFOX_ENABLED", "false")
     monkeypatch.setenv("COLLECTOR_NVD_SCHEDULE", " ")

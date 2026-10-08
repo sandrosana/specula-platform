@@ -52,6 +52,20 @@ class Settings(BaseSettings):
 
     collector_env: dict[str, str] = Field(default_factory=_collector_environment)
 
+    @field_validator(
+        "https_proxy",
+        "nvd_api_key",
+        "ransomware_live_api_key",
+        "abusech_auth_key",
+        "otx_api_key",
+        "maxmind_license_key",
+        mode="before",
+    )
+    @classmethod
+    def _empty_means_unset(cls, value: object) -> object:
+        # `.env.example` lists optional variables with empty values (e.g. HTTPS_PROXY=).
+        return None if isinstance(value, str) and not value.strip() else value
+
     @field_validator("log_level", mode="before")
     @classmethod
     def _uppercase_log_level(cls, value: object) -> object:
