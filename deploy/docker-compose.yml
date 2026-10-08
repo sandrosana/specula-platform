@@ -6,8 +6,8 @@
 # Networks:
 #   public  – only the proxy; ports 80/443 are published here
 #   web     – internal: proxy <-> api
-#   data    – internal: api, scheduler, migrate <-> db (no internet access)
-# The scheduler gets outbound internet access in M2, when collectors arrive.
+#   data    – internal: api, scheduler, migrate, backup <-> db (no internet access)
+#   egress  – outbound internet access, scheduler only (collectors)
 
 name: specula
 
@@ -114,8 +114,14 @@ services:
   scheduler:
     <<: *backend
     command: ["python", "-m", "app.scheduler"]
+    # Only the scheduler receives the source API keys and COLLECTOR_* overrides
+    # (docs/architettura.md §10.3). Variables in `environment` (DATABASE_URL...) win.
+    env_file:
+      - path: ../.env
+        required: false
     networks:
       - data
+      - egress
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -148,6 +154,8 @@ networks:
     internal: true
   data:
     internal: true
+  # Outbound internet access, for the scheduler only (collectors).
+  egress:
 
 volumes:
   db-data:

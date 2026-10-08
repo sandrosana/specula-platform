@@ -23,6 +23,16 @@ uv run uvicorn app.main:create_app --factory --reload
 
 Then open `http://127.0.0.1:8000/api/v1/health` (liveness), `/api/v1/health/ready` (database reachable) or the OpenAPI docs at `/api/v1/docs`.
 
+## Collectors
+
+```bash
+uv run python -m app.collectors list                     # collectors and effective configuration
+uv run python -m app.collectors run <name> [--full] [--no-cache]
+uv run python -m app.scheduler                           # run all schedules
+```
+
+A collector is a `PeriodicCollector` subclass in `app/collectors/`, decorated with `@register`; its entities need a writer registered with `@register_writer` (see `docs/architettura.md` §5).
+
 ## Database
 
 Schema changes go only through Alembic migrations in `migrations/versions/`:
