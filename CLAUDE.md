@@ -34,6 +34,7 @@ Source of truth for scope and design:
 - Python 3.12, type hints everywhere, `ruff` (lint + format) and `mypy` must pass. The whole backend (including tests) is checked with `mypy --strict`, which covers the stricter requirement for collectors.
 - Commands (run from `backend/`, require `uv`): `uv sync`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy`, `uv run pytest`. API: `uv run uvicorn app.main:create_app --factory`.
 - `backend/uv.lock` is committed and CI/Docker install with `--locked`. After changing dependencies in `pyproject.toml`, regenerate it (the workstation has no uv: run `uv lock` in the `ghcr.io/astral-sh/uv:python3.12-bookworm-slim` container on the LAB host) and commit it in the same PR.
+- Before pushing a backend change, run ruff, mypy and pytest (including `tests/db` against a temporary PostgreSQL) in throwaway containers on the LAB host, then remove them; this is also where `uv.lock` is regenerated. Never touch the running `specula` stack for checks.
 - Tests run with network sockets disabled (`pytest-socket`). Never enable real network access in tests. The only exception is `tests/db/`, which may connect to `127.0.0.1` (the disposable database given by `TEST_DATABASE_URL`) through `DB_TEST_MARKS`.
 - New tables: models use `ClassifiedMixin` for the `classification` column; never add a Python-side default for it (the database default is `sensitive`).
 - Async throughout: SQLAlchemy 2.0 async, httpx async.
