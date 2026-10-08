@@ -57,3 +57,4 @@ Per un dump specifico sostituire `latest` con il nome del file.
 
 | Data | Dump | Durata | Esito | Note |
 |------|------|--------|-------|------|
+| 08/10/2026 | `specula-20261008-1258.dump.age` (2.177 byte) | 1 s | ✅ OK | Prima prova (criterio di completamento di M1). Primo backup manuale dopo l'attivazione del servizio. Checksum ok, migrazioni `0001` = `0001`, `alembic_version` 1 = 1 riga. Database ancora senza dati delle fonti (arrivano da M2). Chiave fornita dal PC del responsabile via SSH. |
