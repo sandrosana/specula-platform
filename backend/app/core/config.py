@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     # Time zone of the collector schedules.
     scheduler_timezone: str = "Europe/Rome"
 
+    # EPSS score from which a CVE is "likely to be exploited" (priority level P3,
+    # docs/specifica §6) and whose crossing is kept in the EPSS history.
+    epss_threshold: float = Field(default=0.5, gt=0, lt=1)
+
     # Source API keys: only the scheduler container receives them.
     nvd_api_key: SecretStr | None = None
     ransomware_live_api_key: SecretStr | None = None
