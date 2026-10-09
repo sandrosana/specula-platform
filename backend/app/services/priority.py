@@ -86,3 +86,29 @@ def priority_reason(
 def evaluate(facts: PriorityFacts, epss_threshold: float) -> tuple[PriorityLevel, dict[str, Any]]:
     level = priority_level(facts, epss_threshold)
     return level, priority_reason(facts, level, epss_threshold)
+
+
+RANKS: dict[PriorityLevel, int] = {"P1": 4, "P2": 3, "P3": 2, "P4": 1}
+NO_DATE = date(1, 1, 1)
+MISSING = -1.0
+
+
+@dataclass(frozen=True)
+class PrioritySort:
+    """Order inside the priority list (spec §6), all fields compared descending:
+    level, then KEV date for P1/P2, then EPSS and CVSS (CVSS and EPSS for P4).
+    Missing values sort last."""
+
+    rank: int
+    kev_date: date
+    first: float
+    second: float
+
+
+def priority_sort(facts: PriorityFacts, level: PriorityLevel) -> PrioritySort:
+    epss = MISSING if facts.epss is None else facts.epss
+    cvss = MISSING if facts.cvss_score is None else facts.cvss_score
+    kev_date = facts.kev_date_added if level in ("P1", "P2") and facts.kev_date_added else NO_DATE
+    if level == "P4":
+        return PrioritySort(RANKS[level], kev_date, cvss, epss)
+    return PrioritySort(RANKS[level], kev_date, epss, cvss)
