@@ -62,6 +62,26 @@ docker compose --env-file .env -f deploy/docker-compose.yml exec scheduler pytho
 docker compose --env-file .env -f deploy/docker-compose.yml exec scheduler python -m app.collectors run <name>
 ```
 
+Never start a manual run of a collector that is already running: the advisory lock skips it (`skipped_locked`), but a forced `--full` run of NVD repeats the whole load.
+
+### CVE priority levels
+
+Levels P1–P4 and their sort key are updated automatically after every NVD, KEV and EPSS write. Recompute every CVE once after a migration that adds priority columns, or after changing `EPSS_THRESHOLD` in `.env` (restart the `scheduler` first so it reads the new value):
+
+```bash
+docker compose --env-file .env -f deploy/docker-compose.yml exec scheduler python -m app.processing priorities
+```
+
+### Reference figures (LAB host, October 2026)
+
+| Operation | Records | Duration | Database after |
+|-----------|---------|----------|----------------|
+| NVD full load (`nvd`, first run, with API key) | 403,403 CVEs, 1,435,018 affected products, 202 requests | 1 h 15 min | 1.9 GB |
+| EPSS first run (`epss`) | 384,534 scores | 3 min | 2.6 GB |
+| Priority recompute, all CVEs | 384,930 rows | about 1 min | 2.8 GB |
+
+`GET /api/v1/cves` (priority order, 10 items, warm cache): about 240 ms, mostly the `total` count; filtered by level about 50 ms; `GET /api/v1/cves/{cve_id}` about 20 ms.
+
 ## Backups
 
 Set `BACKUP_AGE_RECIPIENT` in `.env` and create the marker file on the backup disk once (as root): `touch /mnt/specula-backup/.specula-backup-disk`. Procedures for manual backups and restore tests: [docs/runbook-backup.md](../docs/runbook-backup.md).
