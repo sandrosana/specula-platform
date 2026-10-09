@@ -180,11 +180,18 @@ class SourceHttpClient:
         headers: Mapping[str, str] | None = None,
         secret_headers: Mapping[str, str] | None = None,
         use_cache: bool = True,
+        store: bool = True,
+        read_timeout: float | None = None,
     ) -> HttpResult:
-        """GET with cache. `use_cache=False` (forced runs) ignores and refreshes the cache."""
+        """GET with cache.
+
+        `use_cache=False` (forced runs) ignores and refreshes the cache. `store=False`
+        bypasses the cache entirely, for large one-off responses (e.g. NVD pages).
+        `read_timeout` (seconds) overrides the default read timeout for slow sources.
+        """
         query = dict(params or {})
         key = cache_key("GET", url, query)
-        cached = await self._cache.get(key) if use_cache else None
+        cached = await self._cache.get(key) if use_cache and store else None
         if cached is not None and cached.expires_at > self._now():
             return self._result(cached, from_cache=True)
 
@@ -196,7 +203,7 @@ class SourceHttpClient:
                 request_headers["If-Modified-Since"] = cached.last_modified
         request_headers.update(secret_headers or {})
 
-        response = await self._send(url, query, request_headers)
+        response = await self._send(url, query, request_headers, read_timeout)
         now = self._now()
         if response.status_code == 304 and cached is not None:
             renewed = replace(cached, fetched_at=now, expires_at=now + self._cache_ttl)
@@ -218,12 +225,20 @@ class SourceHttpClient:
             expires_at=now + self._cache_ttl,
             classification=self._classification,
         )
-        await self._cache.put(entry)
+        if store:
+            await self._cache.put(entry)
         return self._result(entry, from_cache=False)
 
     async def _send(
-        self, url: str, params: Mapping[str, str], headers: Mapping[str, str]
+        self,
+        url: str,
+        params: Mapping[str, str],
+        headers: Mapping[str, str],
+        read_timeout: float | None = None,
     ) -> httpx.Response:
+        request_timeout = (
+            httpx.Timeout(read_timeout, connect=DEFAULT_TIMEOUT.connect) if read_timeout else None
+        )
         for attempt in range(1, self._max_attempts + 1):
             await self._check_quota()
             if self._limiter is not None:
@@ -232,7 +247,12 @@ class SourceHttpClient:
             await self._usage.increment(self._source, self._now().date())
             last_attempt = attempt == self._max_attempts
             try:
-                response = await self._client.get(url, params=params, headers=headers)
+                if request_timeout is None:
+                    response = await self._client.get(url, params=params, headers=headers)
+                else:
+                    response = await self._client.get(
+                        url, params=params, headers=headers, timeout=request_timeout
+                    )
             except httpx.TransportError as exc:
                 if last_attempt:
                     raise SourceHttpError(self._source, url, None) from exc

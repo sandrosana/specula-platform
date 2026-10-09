@@ -290,6 +290,35 @@ async def test_network_errors_give_up_after_max_attempts(
     assert used(usage) == 4
 
 
+@pytest.mark.anyio
+async def test_store_false_bypasses_the_cache(
+    respx_mock: respx.MockRouter, make_client: ClientFactory, cache: MemoryCacheStore
+) -> None:
+    route = respx_mock.get(FEED).mock(return_value=httpx.Response(200, content=b"big page"))
+    client = make_client()
+
+    first = await client.get(FEED, store=False)
+    await client.get(FEED, store=False)
+
+    assert first.from_cache is False
+    assert route.call_count == 2
+    assert cache.entries == {}
+
+
+@pytest.mark.anyio
+async def test_timeout_override_is_sent(
+    respx_mock: respx.MockRouter, make_client: ClientFactory
+) -> None:
+    route = respx_mock.get(FEED).mock(return_value=httpx.Response(200, content=b"ok"))
+    client = make_client()
+
+    await client.get(FEED, read_timeout=120.0)
+
+    timeout = route.calls.last.request.extensions["timeout"]
+    assert timeout["read"] == 120.0
+    assert timeout["connect"] == 10.0
+
+
 def test_period_start() -> None:
     assert period_start(date(2026, 10, 8), "day") == date(2026, 10, 8)
     assert period_start(date(2026, 10, 8), "month") == date(2026, 10, 1)
