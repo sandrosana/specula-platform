@@ -1,9 +1,9 @@
 """Shared FastAPI dependencies."""
 
 import secrets
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
-from typing import Annotated, cast
+from typing import Annotated, Literal, cast
 
 from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from app.core.classification import Classification
 from app.core.config import Settings
 from app.models import SessionRow, UserRow
+from app.services import audit
 from app.services.auth import SESSION_COOKIE, resolve_session
 
 # Until M4 adds grants (m4/classification-filters) every user sees public data only.
@@ -133,6 +134,35 @@ async def get_auth(auth: AuthAnyDep) -> Auth:
 
 
 AuthDep = Annotated[Auth, Depends(get_auth)]
+
+
+Role = Literal["viewer", "analyst", "admin"]
+
+
+def require_roles(*roles: Role) -> Callable[..., Awaitable[Auth]]:
+    """Dependency that lets only `roles` through (docs/specifica §2). Refusals are audited."""
+    allowed = frozenset(roles)
+
+    async def dependency(auth: AuthDep, request: Request, db: SessionDep) -> Auth:
+        if auth.user.role not in allowed:
+            audit.record(
+                db,
+                "access.role",
+                "denied",
+                user=auth.user,
+                ip=client_ip(request),
+                details={"method": request.method, "path": request.url.path},
+            )
+            await db.commit()
+            raise HTTPException(status_code=403, detail="Your role does not allow this action.")
+        return auth
+
+    return dependency
+
+
+# Every write endpoint declares one of these (CLAUDE.md, docs/architettura.md §9).
+AnalystDep = Annotated[Auth, Depends(require_roles("analyst", "admin"))]
+AdminDep = Annotated[Auth, Depends(require_roles("admin"))]
 
 
 def get_visible_classes(auth: AuthDep) -> frozenset[Classification]:

@@ -25,6 +25,7 @@ from app.schemas.auth import (
     TotpSetupOut,
     TotpVerifyIn,
 )
+from app.services import audit
 from app.services.auth import (
     MFA_PENDING_MAX_AGE,
     SESSION_COOKIE,
@@ -133,6 +134,7 @@ async def logout(
     request: Request, response: Response, db: SessionDep, auth: SessionAuthDep
 ) -> None:
     await revoke_session(db, request.cookies.get(SESSION_COOKIE, ""))
+    audit.record(db, "auth.logout", "success", user=auth.user, ip=client_ip(request))
     await db.commit()
     _clear_cookie(response)
 
@@ -150,10 +152,19 @@ async def me(response: Response, auth: SessionAuthDep) -> MeOut:
     summary="Change the password; every session of the user is closed",
 )
 async def password(
-    body: PasswordChangeIn, response: Response, db: SessionDep, auth: AuthAnyDep
+    body: PasswordChangeIn,
+    request: Request,
+    response: Response,
+    db: SessionDep,
+    auth: AuthAnyDep,
 ) -> None:
     user = auth.user
+    ip = client_ip(request)
     if not verify_password(user.password_hash, body.current_password):
+        audit.record(
+            db, "auth.password", "failure", user=user, ip=ip, details={"reason": "current"}
+        )
+        await db.commit()
         raise HTTPException(status_code=403, detail="The current password is not correct.")
     problems = password_problems(body.new_password, user.email)
     if body.new_password == body.current_password:
@@ -164,6 +175,7 @@ async def password(
             detail="The new password does not meet the rules: " + ", ".join(problems) + ".",
         )
     await change_password(db, user, body.new_password)
+    audit.record(db, "auth.password", "success", user=user, ip=ip)
     await db.commit()
     _clear_cookie(response)
 

@@ -20,6 +20,7 @@ from app.core.config import Settings, get_settings
 from app.core.db import create_engine, create_session_factory
 from app.core.logging import configure_logging
 from app.models import UserRow
+from app.services import audit
 from app.services.auth import create_user, normalize_email
 from app.services.mfa import reset_second_factor
 from app.services.passwords import MIN_LENGTH, password_problems
@@ -62,6 +63,14 @@ async def create_admin(settings: Settings, email: str, password: str) -> int:
             user = await create_user(
                 session, normalized, password, "admin", must_change_password=False
             )
+            audit.record(
+                session,
+                "user.created",
+                "success",
+                actor=audit.CLI_ACTOR,
+                target=user,
+                details={"role": "admin"},
+            )
             print(f"Admin {user.email} created (id {user.id}).")
             return 0
     finally:
@@ -79,6 +88,7 @@ async def reset_totp(settings: Settings, email: str) -> int:
                 print("No user with this email.", file=sys.stderr)
                 return 1
             await reset_second_factor(session, user)
+            audit.record(session, "auth.mfa.reset", "success", actor=audit.CLI_ACTOR, target=user)
             print(f"Second factor removed for {user.email}; all their sessions are closed.")
             return 0
     finally:

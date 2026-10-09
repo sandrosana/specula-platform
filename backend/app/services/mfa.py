@@ -8,7 +8,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import RecoveryCodeRow, UserRow
-from app.services import totp
+from app.services import audit, totp
 from app.services.auth import (
     is_locked,
     login_succeeded,
@@ -60,6 +60,9 @@ async def confirm_enrolment(
         raise MfaError("the pending secret cannot be read") from exc
     step = totp.verify(secret, code, at, None)
     if step is None:
+        audit.record(
+            session, "auth.mfa", "failure", user=user, ip=ip, details={"step": "enrolment"}
+        )
         await register_failure(session, user, ip, at)
         return None
     user.totp_secret = user.totp_pending_secret
@@ -74,6 +77,7 @@ async def confirm_enrolment(
         for recovery in codes
     )
     logger.info("second factor activated for user %d", user.id)
+    audit.record(session, "auth.mfa.enrolled", "success", user=user, ip=ip)
     return codes
 
 
@@ -92,7 +96,9 @@ async def verify_second_factor(
     if not user.totp_enabled or user.totp_secret is None:
         raise MfaError("second factor not active")
     if is_locked(user, at) or not user.is_active:
+        audit.record(session, "auth.mfa", "denied", user=user, ip=ip, details={"reason": "locked"})
         return False
+    method = "totp" if code is not None else "recovery_code"
     if code is not None:
         try:
             secret = decrypt(secret_key, user.totp_secret)
@@ -102,6 +108,9 @@ async def verify_second_factor(
         if step is not None:
             user.totp_last_step = step
             login_succeeded(user, at)
+            audit.record(
+                session, "auth.mfa", "success", user=user, ip=ip, details={"method": method}
+            )
             return True
     elif recovery_code is not None:
         used = await session.execute(
@@ -117,7 +126,11 @@ async def verify_second_factor(
         if used.first() is not None:
             logger.warning("recovery code used by user %d", user.id)
             login_succeeded(user, at)
+            audit.record(
+                session, "auth.mfa", "success", user=user, ip=ip, details={"method": method}
+            )
             return True
+    audit.record(session, "auth.mfa", "failure", user=user, ip=ip, details={"method": method})
     await register_failure(session, user, ip, at)
     return False
 
