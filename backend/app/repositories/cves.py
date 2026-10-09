@@ -1,11 +1,10 @@
 """CVE queries for GET /cves and GET /cves/{cve_id} (docs/architettura.md §9).
 
-Priority order (docs/specifica §6), expressed as one descending sort key so that
-keyset pagination stays a single row comparison:
-- level: P1 first (rank 4) ... P4 last (rank 1); CVEs not yet ranked count as P4;
-- P1 and P2: KEV date added, then EPSS, then CVSS;
-- P3: EPSS, then CVSS;
-- P4: CVSS, then EPSS; missing values go last.
+Priority order (docs/specifica §6) is the descending sort key stored on each CVE
+by the priority post-processor (app.services.priority.PrioritySort), so keyset
+pagination is a single row comparison walking ix_vulnerabilities_priority_sort.
+The stored key, like the level, is derived from KEV and EPSS, which are public
+data in the MVP.
 """
 
 from dataclasses import dataclass
@@ -14,13 +13,9 @@ from typing import Any, Literal
 
 from sqlalchemy import (
     ColumnElement,
-    Date,
-    Float,
-    Integer,
     Select,
     and_,
     case,
-    cast,
     exists,
     func,
     literal,
@@ -38,11 +33,10 @@ from app.models import (
     VulnerabilityProductRow,
     VulnerabilityRow,
 )
+from app.services.priority import RANKS
 
 CveSort = Literal["priority", "published"]
 PRODUCTS_IN_LIST = 5
-MISSING = -1.0
-NO_DATE = date(1, 1, 1)
 
 
 @dataclass(frozen=True)
@@ -70,20 +64,13 @@ def _contains(value: str) -> str:
     return f"%{escaped}%"
 
 
-def _level() -> ColumnElement[str]:
-    return func.coalesce(VulnerabilityRow.priority_level, "P4")
-
-
 def _priority_key() -> list[ColumnElement[Any]]:
-    level = _level()
-    kev_level = level.in_(["P1", "P2"])
-    epss = func.coalesce(EpssScoreRow.epss, MISSING)
-    cvss = func.coalesce(cast(VulnerabilityRow.cvss_score, Float), MISSING)
+    # Stored by the priority post-processor and covered by ix_vulnerabilities_priority_sort.
     return [
-        case({"P1": 4, "P2": 3, "P3": 2}, value=level, else_=1).cast(Integer),
-        case((kev_level, func.coalesce(KevEntryRow.date_added, NO_DATE)), else_=NO_DATE).cast(Date),
-        case((level == "P4", cvss), else_=epss).cast(Float),
-        case((level == "P4", epss), else_=cvss).cast(Float),
+        VulnerabilityRow.priority_rank.expression,
+        VulnerabilityRow.priority_kev_date.expression,
+        VulnerabilityRow.priority_sort_first.expression,
+        VulnerabilityRow.priority_sort_second.expression,
         VulnerabilityRow.cve_id.expression,
     ]
 
@@ -125,7 +112,9 @@ def _conditions(
     if not filters.include_rejected:
         conditions.append(VulnerabilityRow.vuln_status != "Rejected")
     if filters.levels:
-        conditions.append(_level().in_(sorted(filters.levels)))
+        # The rank, not the level, so the filter uses the sort index; an unranked CVE is P4.
+        ranks = sorted(RANKS[level] for level in filters.levels if level in RANKS)
+        conditions.append(VulnerabilityRow.priority_rank.in_(ranks))
     if filters.vendor:
         conditions.append(
             exists().where(
@@ -185,26 +174,25 @@ async def list_cves(
 async def count_cves(
     session: AsyncSession, *, filters: CveFilters, visible: frozenset[Classification]
 ) -> int:
-    statement = (
-        select(func.count())
-        .select_from(VulnerabilityRow)
-        .outerjoin(
+    statement = select(func.count()).select_from(VulnerabilityRow)
+    # Join KEV and EPSS only when a filter reads them: counting stays a single-table scan.
+    if filters.in_kev is not None:
+        statement = statement.outerjoin(
             KevEntryRow,
             and_(
                 KevEntryRow.cve_id == VulnerabilityRow.cve_id,
                 KevEntryRow.classification.in_(visible),
             ),
         )
-        .outerjoin(
+    if filters.min_epss is not None:
+        statement = statement.outerjoin(
             EpssScoreRow,
             and_(
                 EpssScoreRow.cve_id == VulnerabilityRow.cve_id,
                 EpssScoreRow.classification.in_(visible),
             ),
         )
-        .where(and_(*_conditions(filters, visible)))
-    )
-    return int(await session.scalar(statement) or 0)
+    return int(await session.scalar(statement.where(and_(*_conditions(filters, visible)))) or 0)
 
 
 async def products_of(

@@ -19,7 +19,7 @@ from app.collectors.nvd import Vulnerability
 from app.core.config import get_settings
 from app.models import EpssScoreRow, KevEntryRow, VulnerabilityRow
 from app.processing.base import PostProcessor, register_processor
-from app.services.priority import PriorityFacts, evaluate
+from app.services.priority import PriorityFacts, PrioritySort, evaluate, priority_sort
 
 RECOMPUTE_BATCH = 2000
 
@@ -40,6 +40,10 @@ async def recompute_priorities(
             VulnerabilityRow.cvss_severity,
             VulnerabilityRow.priority_level,
             VulnerabilityRow.priority_reason,
+            VulnerabilityRow.priority_rank,
+            VulnerabilityRow.priority_kev_date,
+            VulnerabilityRow.priority_sort_first,
+            VulnerabilityRow.priority_sort_second,
             KevEntryRow.date_added,
             KevEntryRow.known_ransomware_campaign_use,
             EpssScoreRow.epss,
@@ -51,21 +55,34 @@ async def recompute_priorities(
     )
     changes: list[dict[str, Any]] = []
     for row in rows:
-        level, reason = evaluate(
-            PriorityFacts(
-                kev_date_added=row.date_added,
-                kev_ransomware_use=row.known_ransomware_campaign_use,
-                epss=row.epss,
-                epss_percentile=row.percentile,
-                cvss_score=row.cvss_score,
-                cvss_version=row.cvss_version,
-                cvss_severity=row.cvss_severity,
-            ),
-            threshold,
+        facts = PriorityFacts(
+            kev_date_added=row.date_added,
+            kev_ransomware_use=row.known_ransomware_campaign_use,
+            epss=row.epss,
+            epss_percentile=row.percentile,
+            cvss_score=row.cvss_score,
+            cvss_version=row.cvss_version,
+            cvss_severity=row.cvss_severity,
         )
-        if level != row.priority_level or reason != row.priority_reason:
+        level, reason = evaluate(facts, threshold)
+        sort = priority_sort(facts, level)
+        stored = PrioritySort(
+            row.priority_rank,
+            row.priority_kev_date,
+            row.priority_sort_first,
+            row.priority_sort_second,
+        )
+        if level != row.priority_level or reason != row.priority_reason or sort != stored:
             changes.append(
-                {"cve_id": row.cve_id, "priority_level": level, "priority_reason": reason}
+                {
+                    "cve_id": row.cve_id,
+                    "priority_level": level,
+                    "priority_reason": reason,
+                    "priority_rank": sort.rank,
+                    "priority_kev_date": sort.kev_date,
+                    "priority_sort_first": sort.first,
+                    "priority_sort_second": sort.second,
+                }
             )
     if changes:
         # ORM bulk UPDATE by primary key: one executemany statement.
