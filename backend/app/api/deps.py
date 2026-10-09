@@ -9,6 +9,7 @@ from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.core.classification import Classification
+from app.core.config import Settings
 from app.models import SessionRow, UserRow
 from app.services.auth import SESSION_COOKIE, resolve_session
 
@@ -33,6 +34,14 @@ async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
+def get_app_settings(request: Request) -> Settings:
+    """The settings the application was created with."""
+    return cast(Settings, request.app.state.settings)
+
+
+SettingsDep = Annotated[Settings, Depends(get_app_settings)]
+
+
 def client_ip(request: Request) -> str:
     # Behind Caddy, uvicorn's proxy headers handling sets the real client address.
     return request.client.host if request.client else "unknown"
@@ -54,8 +63,8 @@ class Auth:
     user: UserRow
 
 
-async def get_auth_any(request: Request, db: SessionDep) -> Auth:
-    """The logged-in user, also while a password change is pending.
+async def _session_auth(request: Request, db: SessionDep) -> Auth:
+    """The session of the request, complete or waiting for the second factor.
 
     Writes (non-GET requests) also need the CSRF token of the session and, when
     present, a same-site Origin header.
@@ -74,6 +83,30 @@ async def get_auth_any(request: Request, db: SessionDep) -> Auth:
         if not secrets.compare_digest(sent.encode(), row.csrf_token.encode()):
             raise HTTPException(status_code=403, detail="Missing or invalid CSRF token.")
     return Auth(session=row, user=user)
+
+
+SessionAuthDep = Annotated[Auth, Depends(_session_auth)]
+
+
+async def get_mfa_pending_auth(auth: SessionAuthDep) -> Auth:
+    """A session whose password is checked and whose second factor is still missing."""
+    if not auth.session.mfa_pending:
+        raise HTTPException(status_code=409, detail="The session is already complete.")
+    return auth
+
+
+MfaPendingDep = Annotated[Auth, Depends(get_mfa_pending_auth)]
+
+
+async def get_auth_any(auth: SessionAuthDep) -> Auth:
+    """The logged-in user, also while a password change is pending."""
+    if auth.session.mfa_pending:
+        raise HTTPException(
+            status_code=401,
+            detail="Second factor required.",
+            headers={"WWW-Authenticate": "Cookie"},
+        )
+    return auth
 
 
 AuthAnyDep = Annotated[Auth, Depends(get_auth_any)]

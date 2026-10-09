@@ -19,6 +19,9 @@ from app.core.logging import configure_logging
 def create_app(settings: Settings | None = None) -> FastAPI:
     config = settings or get_settings()
     configure_logging(config.log_level)
+    if config.environment == "production" and config.secret_key is None:
+        # Without it Admins cannot complete the second factor (docs/architettura.md §10.4).
+        raise RuntimeError("SECRET_KEY must be set for the api in production")
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -38,6 +41,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redoc_url=None,
         lifespan=lifespan,
     )
+    app.state.settings = config
     install_error_handlers(app)
     app.include_router(api_router, prefix=config.api_prefix)
     return app

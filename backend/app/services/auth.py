@@ -21,6 +21,8 @@ from app.services.passwords import (
 SESSION_COOKIE = "specula_session"
 SESSION_MAX_AGE = timedelta(hours=10)
 SESSION_IDLE = timedelta(minutes=60)
+# Time to type the second-factor code after the password.
+MFA_PENDING_MAX_AGE = timedelta(minutes=5)
 # last_seen_at is written at most this often, not on every request.
 SESSION_TOUCH = timedelta(minutes=1)
 LOCK_AFTER = 5
@@ -55,6 +57,7 @@ class LoginResult:
 @dataclass(frozen=True)
 class NewSession:
     token: str
+    token_hash: str
     csrf_token: str
     expires_at: datetime
 
@@ -78,6 +81,20 @@ async def ip_failures(session: AsyncSession, ip: str, now: datetime) -> int:
     return int(count or 0)
 
 
+def is_locked(user: UserRow, at: datetime) -> bool:
+    return user.locked_until is not None and user.locked_until > at
+
+
+async def register_failure(session: AsyncSession, user: UserRow, ip: str, at: datetime) -> None:
+    """A wrong password or second-factor code: 5 in a row lock the account."""
+    user.failed_logins += 1
+    if user.failed_logins >= LOCK_AFTER:
+        user.locked_until = at + LOCK_FOR
+        user.failed_logins = 0
+        logger.warning("user %d locked for %s after failed logins", user.id, LOCK_FOR)
+    await _record_failure(session, ip, at)
+
+
 async def authenticate(
     session: AsyncSession, email: str, password: str, ip: str, now: datetime | None = None
 ) -> LoginResult:
@@ -98,26 +115,31 @@ async def authenticate(
         return LoginResult("invalid")
 
     password_ok = verify_password(user.password_hash, password)
-    locked = user.locked_until is not None and user.locked_until > at
-    if locked or not user.is_active:
+    if is_locked(user, at) or not user.is_active:
         await _record_failure(session, ip, at)
         logger.warning("login refused for user %d: locked or disabled", user.id)
         return LoginResult("invalid")
     if not password_ok:
-        user.failed_logins += 1
-        if user.failed_logins >= LOCK_AFTER:
-            user.locked_until = at + LOCK_FOR
-            user.failed_logins = 0
-            logger.warning("user %d locked for %s after failed logins", user.id, LOCK_FOR)
-        await _record_failure(session, ip, at)
+        await register_failure(session, user, ip, at)
         return LoginResult("invalid")
 
+    if needs_rehash(user.password_hash):
+        user.password_hash = hash_password(password)
+    if requires_second_factor(user):
+        # Counters are reset only once the second factor is accepted too.
+        return LoginResult("ok", user)
+    login_succeeded(user, at)
+    return LoginResult("ok", user)
+
+
+def requires_second_factor(user: UserRow) -> bool:
+    return user.role == "admin"
+
+
+def login_succeeded(user: UserRow, at: datetime) -> None:
     user.failed_logins = 0
     user.locked_until = None
     user.last_login_at = at
-    if needs_rehash(user.password_hash):
-        user.password_hash = hash_password(password)
-    return LoginResult("ok", user)
 
 
 async def create_session(
@@ -126,16 +148,19 @@ async def create_session(
     ip: str | None,
     user_agent: str | None,
     now: datetime | None = None,
+    *,
+    mfa_pending: bool = False,
 ) -> NewSession:
     at = now or utcnow()
     token = secrets.token_urlsafe(32)
     csrf_token = secrets.token_urlsafe(32)
-    expires_at = at + SESSION_MAX_AGE
+    expires_at = at + (MFA_PENDING_MAX_AGE if mfa_pending else SESSION_MAX_AGE)
     session.add(
         SessionRow(
             token_hash=token_hash(token),
             user_id=user.id,
             csrf_token=csrf_token,
+            mfa_pending=mfa_pending,
             created_at=at,
             last_seen_at=at,
             expires_at=expires_at,
@@ -145,7 +170,9 @@ async def create_session(
     )
     # Housekeeping: sessions past their absolute end are useless.
     await session.execute(delete(SessionRow).where(SessionRow.expires_at < at))
-    return NewSession(token=token, csrf_token=csrf_token, expires_at=expires_at)
+    return NewSession(
+        token=token, token_hash=token_hash(token), csrf_token=csrf_token, expires_at=expires_at
+    )
 
 
 async def resolve_session(

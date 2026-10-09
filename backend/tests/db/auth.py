@@ -15,6 +15,7 @@ from app.main import create_app
 from app.services.auth import create_user
 
 PASSWORD = "violet-harbour-lantern-92"
+SECRET_KEY = "db-test-secret-key-db-test-secret-key"
 # Secure cookies are only sent over https, as in production.
 BASE_URL = "https://testserver"
 
@@ -46,6 +47,7 @@ def settings_for(database_url: str) -> Settings:
         environment="test",
         log_level="WARNING",
         database_url=SecretStr(database_url),
+        secret_key=SecretStr(SECRET_KEY),
         collector_env={},
     )
 

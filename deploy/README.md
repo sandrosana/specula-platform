@@ -20,6 +20,7 @@ git clone https://github.com/sandrosana/specula-platform.git
 cd specula-platform
 cp .env.example .env
 sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 32)/" .env
+sed -i "s/^SECRET_KEY=.*/SECRET_KEY=$(openssl rand -hex 32)/" .env
 chmod 600 .env
 docker compose --env-file .env -f deploy/docker-compose.yml up -d --build
 docker compose --env-file .env -f deploy/docker-compose.yml ps
@@ -40,6 +41,24 @@ docker compose --env-file .env -f deploy/docker-compose.yml up -d --build
 ```
 
 Migrations run automatically through the `migrate` service.
+
+## Users
+
+Every API call except `/api/v1/health` needs a login (docs/architettura.md §10.4). Create the first Admin inside the `api` container; the password (at least 14 characters) is asked twice without echo:
+
+```bash
+docker compose --env-file .env -f deploy/docker-compose.yml exec api python -m app.users create-admin --email name@example.com
+```
+
+At the first login an Admin enrols the second factor (TOTP): `POST /api/v1/auth/totp/setup` returns the secret and the `otpauth://` URI for the authenticator app, `POST /api/v1/auth/totp/activate` confirms it with a code and returns 10 one-time recovery codes, shown only once. Later logins need a code (`POST /api/v1/auth/totp`).
+
+An Admin who lost both the phone and the recovery codes enrols again after a reset, which also closes all their sessions:
+
+```bash
+docker compose --env-file .env -f deploy/docker-compose.yml exec api python -m app.users reset-totp --email name@example.com
+```
+
+`SECRET_KEY` encrypts the second-factor secrets: changing it makes them unreadable, so every Admin must be reset and enrol again.
 
 ## Trusting the certificate
 
