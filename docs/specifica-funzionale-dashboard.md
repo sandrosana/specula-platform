@@ -1,11 +1,11 @@
 # Specula Threat – Specifica funzionale della dashboard
 
-> Stato: **APPROVATO – v1.3** (09/10/2026)
+> Stato: **BOZZA v1.4 – modifica a §2 (accesso) in attesa di approvazione** (09/10/2026). La v1.3 resta approvata.
 > Prodotto: **Specula Threat**, modulo di Threat Intelligence della piattaforma **Specula** (moduli futuri: Exposure, Third Party, OSINT, CLOSINT).
 > Ambito: MVP. Fonti dati: NVD, CISA KEV, EPSS, ransomware.live (API PRO), Ransomfeed, abuse.ch, AlienVault OTX, CSIRT Italia.
 > Documenti collegati: [architettura.md](architettura.md) · [identita-visiva.md](identita-visiva.md)
 >
-> Versioni: v1.0 approvazione iniziale · v1.1 modifica editoriale (nome del prodotto), nessuna modifica funzionale · v1.2 destinazione dei backup allineata alla decisione #14 dell'architettura · v1.3 Ransomfeed tra le fonti MVP; roadmap: arricchimento on-demand (VirusTotal, Shodan) dopo il rilascio, monitor dei leak (IntelX, Dexpose) nel modulo Exposure.
+> Versioni: v1.0 approvazione iniziale · v1.1 modifica editoriale (nome del prodotto), nessuna modifica funzionale · v1.2 destinazione dei backup allineata alla decisione #14 dell'architettura · v1.3 Ransomfeed tra le fonti MVP; roadmap: arricchimento on-demand (VirusTotal, Shodan) dopo il rilascio, monitor dei leak (IntelX, Dexpose) nel modulo Exposure · v1.4 regole di accesso degli utenti locali, con TOTP per gli Admin (§2).
 
 ---
 
@@ -28,6 +28,8 @@ Specula Threat non esegue scansioni attive: aggrega, normalizza e correla dati d
 | **Admin** | Tutto ciò che fa l'Analyst, in più gestisce utenti, vede lo stato delle fonti, forza un aggiornamento manuale, abilita o disabilita i collector. Non vede mai il valore delle chiavi API, solo se sono presenti. |
 
 Ogni azione di modifica (topic, utenti, run manuali) finisce nell'audit log.
+
+**Accesso.** Nell'MVP gli utenti sono locali ed entrano con email e password (almeno 14 caratteri; le password comuni o già trapelate vengono rifiutate). Gli **Admin** confermano l'accesso anche con un codice da app di autenticazione (TOTP). La sessione dura al massimo 10 ore e scade dopo 60 minuti di inattività. Dopo 5 tentativi falliti l'account si blocca per 15 minuti. Senza login non si vede nessun dato. Con Entra ID (dopo l'MVP) l'accesso passerà all'account aziendale.
 
 ### 2.1 Classificazione dei dati
 
