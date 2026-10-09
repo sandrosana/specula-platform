@@ -5,7 +5,7 @@ from datetime import timedelta
 
 from fastapi import APIRouter, Response
 
-from app.api.deps import SessionDep
+from app.api.deps import AuthDep, SessionDep
 from app.collectors.base import CollectorBase, PeriodicCollector, QuotaPeriod
 from app.collectors.http import period_start, utcnow
 from app.collectors.registry import discover, parse_schedule
@@ -50,7 +50,7 @@ def _last_run(run: CollectorRun | None) -> LastRunOut | None:
 
 
 @router.get("/sources", summary="Status, licensing and usage of every source")
-async def get_sources(response: Response, session: SessionDep) -> SourcesOut:
+async def get_sources(response: Response, session: SessionDep, auth: AuthDep) -> SourcesOut:
     now = utcnow()
     states = await collector_states(session)
     runs = await last_runs(session)
