@@ -32,6 +32,7 @@ from app.core.classification import Classification
 from app.core.config import Settings
 from app.core.db import create_session_factory
 from app.models import CollectorRun, CollectorState
+from app.processing import priority as _priority  # noqa: F401 - registers the processor
 from app.processing.base import inline_processors
 
 RunStatus = Literal["success", "failed", "quota_exceeded", "skipped_locked", "disabled"]
