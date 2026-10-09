@@ -11,7 +11,7 @@ Source of truth for scope and design:
 ## Workflow rules
 
 - **Spec first.** No feature code without an approved spec. If a task requires behaviour not in the docs, update the docs and get approval before implementing.
-- Docs are approved by the owner (Sandro Sana). Docs marked `BOZZA` are not approved yet: do not implement from them. Spec is `APPROVATO – v1.3`, architecture is `APPROVATO – v1.5`, plan is `APPROVATO – v1.1`; changes to them need a new approval.
+- Docs are approved by the owner (Sandro Sana). Docs marked `BOZZA` are not approved yet: do not implement from them. Spec is `APPROVATO – v1.4`, architecture is `APPROVATO – v1.6`, plan is `APPROVATO – v1.2`; changes to them need a new approval.
 - `main` is protected by a GitHub ruleset: changes only through PRs, and the CI checks (`backend-lint`, `backend-types`, `backend-test`, `images`) must pass before merging.
 - Implement milestone by milestone following [docs/piano-implementazione.md](docs/piano-implementazione.md), only once the plan is approved. Do not start a milestone before the previous one meets its completion criterion.
 - Work on feature branches, never commit directly to `main`. Commit only when asked.
