@@ -1,11 +1,11 @@
 # Specula Threat – Specifica funzionale della dashboard
 
-> Stato: **APPROVATO – v1.2** (05/10/2026)
+> Stato: **BOZZA v1.3 – modifiche a intestazione, §4.2, §4.3, §8, §10 in attesa di approvazione** (09/10/2026). La v1.2 resta approvata.
 > Prodotto: **Specula Threat**, modulo di Threat Intelligence della piattaforma **Specula** (moduli futuri: Exposure, Third Party, OSINT, CLOSINT).
-> Ambito: MVP. Fonti dati: NVD, CISA KEV, EPSS, ransomware.live (API PRO), abuse.ch, AlienVault OTX, CSIRT Italia.
+> Ambito: MVP. Fonti dati: NVD, CISA KEV, EPSS, ransomware.live (API PRO), Ransomfeed, abuse.ch, AlienVault OTX, CSIRT Italia.
 > Documenti collegati: [architettura.md](architettura.md) · [identita-visiva.md](identita-visiva.md)
 >
-> Versioni: v1.0 approvazione iniziale · v1.1 modifica editoriale (nome del prodotto), nessuna modifica funzionale · v1.2 destinazione dei backup allineata alla decisione #14 dell'architettura.
+> Versioni: v1.0 approvazione iniziale · v1.1 modifica editoriale (nome del prodotto), nessuna modifica funzionale · v1.2 destinazione dei backup allineata alla decisione #14 dell'architettura · v1.3 Ransomfeed tra le fonti MVP; roadmap: arricchimento on-demand (VirusTotal, Shodan) dopo il rilascio, monitor dei leak (IntelX, Dexpose) nel modulo Exposure.
 
 ---
 
@@ -96,8 +96,8 @@ Ogni tile mostra: **valore**, **variazione** rispetto al periodo precedente di p
 | 3 | **Nuove KEV** | Voci con `dateAdded` nel periodo | CISA KEV |
 | 4 | **KEV legate a ransomware** | Nuove KEV con `knownRansomwareCampaignUse = Known` | CISA KEV |
 | 5 | **CVE ad alto rischio EPSS** | CVE il cui punteggio EPSS ha superato la soglia nel periodo (soglia default 0.5, configurabile) | EPSS |
-| 6 | **Vittime ransomware** | Vittime pubblicate nel periodo; sotto-valore: di cui nel paese di interesse | ransomware.live |
-| 7 | **Gruppi ransomware attivi** | Gruppi con almeno una vittima nel periodo | ransomware.live |
+| 6 | **Vittime ransomware** | Vittime pubblicate nel periodo (una vittima segnalata da più fonti conta una volta); sotto-valore: di cui nel paese di interesse | ransomware.live, Ransomfeed |
+| 7 | **Gruppi ransomware attivi** | Gruppi con almeno una vittima nel periodo | ransomware.live, Ransomfeed |
 | 8 | **Nuovi IOC** | IOC distinti con `first_seen` nel periodo; sotto-valore: C2 attivi (Feodo Tracker, ThreatFox `botnet_cc`) | abuse.ch, OTX, CSIRT Italia (MISP) |
 
 Cliccando su un KPI si apre l'elenco filtrato, ad esempio KPI 3 → tabella KEV del periodo.
@@ -105,7 +105,7 @@ Cliccando su un KPI si apre l'elenco filtrato, ad esempio KPI 3 → tabella KEV 
 ### 4.3 Mappa
 
 - **Choropleth mondiale** con due livelli alternativi (toggle):
-  - **Vittime ransomware per paese** (default): conteggio vittime nel periodo, dal campo paese di ransomware.live.
+  - **Vittime ransomware per paese** (default): conteggio vittime nel periodo, dal campo paese delle fonti ransomware (ransomware.live, Ransomfeed).
   - **Infrastruttura malevola per paese**: IOC di tipo IP geolocalizzati. Usa il paese fornito dalla fonte (es. Feodo Tracker) o, se assente e se configurato, il database GeoIP locale GeoLite2 (architettura §11, decisione #3).
 - Scala colori sequenziale e legenda con i valori; i paesi senza dati sono distinti da quelli con zero.
 - **Hover**: nome paese, conteggio, variazione vs periodo precedente.
@@ -249,7 +249,8 @@ Il livello si ricalcola a ogni aggiornamento di KEV o EPSS. Un cambio di livello
 - Push in tempo reale (SSE/WebSocket)
 - Report PDF
 - Integrazione MISP/OpenCTI e import/export STIX
-- Arricchimento on-demand di IOC tramite fonti a pagamento (VirusTotal, Shodan, GreyNoise, …)
+- Arricchimento on-demand di IOC tramite fonti esterne (VirusTotal, Shodan, …): previsto dopo il rilascio (§10)
+- Monitor dei leak di credenziali (IntelX, Dexpose): appartiene al futuro modulo Exposure (§10)
 - Moduli di ricognizione attiva (gli script OSINT esistenti vengono eliminati, vedi architettura §12)
 - Accesso con Entra ID (OIDC): è il **primo sviluppo dopo l'MVP**; l'MVP usa utenti locali
 
@@ -273,6 +274,7 @@ Fonti previste dopo l'MVP. Il dettaglio tecnico è in [architettura §13](archit
 | Fonte | Cosa porta | Classe dati | Note funzionali |
 |-------|------------|-------------|-----------------|
 | **Tenable.ONE** | Asset e vulnerabilità interne, in sola lettura | Interno | Vista "Esposizione interna" visibile solo con l'abilitazione dedicata Tenable: le CVE prioritarie (§6) incrociate con gli asset aziendali vulnerabili |
-| **Ransomfeed** | Vittime ransomware via RSS e API, con buona copertura italiana | Pubblico | Avvistamenti aggiuntivi delle stesse vittime: nessun duplicato, la vittima mostra più fonti |
+| **Arricchimento on-demand** (VirusTotal, Shodan) | Dal dettaglio di un IOC, un Analyst chiede il report di VirusTotal (hash, IP, dominio, URL) o i dati Shodan di un IP | Interno (le ricerche rivelano cosa sta indagando il team) | Il risultato arriva dopo qualche secondo, non in tempo reale. Solo consultazione di report esistenti: Specula non carica mai file o URL per l'analisi. Si inviano solo IOC pubblici, mai indirizzi privati o domini dell'organizzazione. Ogni richiesta è registrata nell'audit log, con un limite giornaliero per utente. Richiede un piano VirusTotal compatibile con l'uso aziendale |
+| **Monitor dei leak** (IntelX, Dexpose) – modulo **Exposure** | Esposizione dei domini dell'organizzazione: dipendenti e utenti compromessi, log di infostealer, breach pubblici, con andamento nel tempo | Sensibile | Fa parte del modulo Exposure, con specifica propria. Mai password, hash o file delle macchine infette; email solo mascherate. Valutazione privacy prima dell'attivazione |
 | **Telegram** | Messaggi di canali selezionati dagli Admin (solo testo e metadati) | Sensibile | Nessun media scaricato; i messaggi entrano nel feed solo come eventi collegati a entità note (CVE, gruppi, vittime) |
 | **Arricchimento AI (ibrido)** | Traduzione in italiano, sintesi, estrazione di entità da testi (avvisi, pulse, messaggi) | Eredita la classe del dato di origine | I dati Pubblici possono essere elaborati da un provider remoto; i dati Interni e Sensibili (e quelli senza classe) solo dal modello locale sulla VM del LAB, che lavora su CPU, quindi con tempi più lunghi. Ogni invio a un provider remoto è registrato nell'audit log. Il contenuto generato è etichettato "generato da AI" e non sostituisce mai il dato originale |

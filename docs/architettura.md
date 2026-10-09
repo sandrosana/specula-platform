@@ -1,10 +1,10 @@
 # Specula Threat – Architettura
 
-> Stato: **APPROVATO – v1.4** (08/10/2026). Le decisioni ancora aperte sono elencate in §11.2.
+> Stato: **BOZZA v1.5 – modifiche a §4, §6.1, §6.2, §8.2, §11, §13 in attesa di approvazione** (09/10/2026). La v1.4 resta approvata. Le decisioni ancora aperte sono elencate in §11.2.
 > Prodotto: **Specula Threat**, modulo di Threat Intelligence della piattaforma **Specula** (moduli futuri: Exposure, Third Party, OSINT, CLOSINT). Repository: `specula-platform`.
 > Documenti collegati: [specifica-funzionale-dashboard.md](specifica-funzionale-dashboard.md) · [identita-visiva.md](identita-visiva.md)
 >
-> Versioni: v1.0 approvazione iniziale · v1.1 modifica editoriale (nome del prodotto e del progetto compose), nessuna modifica tecnica · v1.2 ambiente LAB (Debian, IP, nessun proxy) e decisioni #12 (TLS) e #14 (backup) · v1.3 §15 dettagli di implementazione del backup (file marcatore, generazione della chiave, stato in file fino a M4, prova di ripristino in container) · v1.4 NVD ed EPSS verificati sulle fonti ufficiali (endpoint, limiti, licenze); EPSS: punteggio attuale più storico delle sole variazioni rilevanti, uso commerciale "Sì" con attribuzione.
+> Versioni: v1.0 approvazione iniziale · v1.1 modifica editoriale (nome del prodotto e del progetto compose), nessuna modifica tecnica · v1.2 ambiente LAB (Debian, IP, nessun proxy) e decisioni #12 (TLS) e #14 (backup) · v1.3 §15 dettagli di implementazione del backup (file marcatore, generazione della chiave, stato in file fino a M4, prova di ripristino in container) · v1.4 NVD ed EPSS verificati sulle fonti ufficiali (endpoint, limiti, licenze); EPSS: punteggio attuale più storico delle sole variazioni rilevanti, uso commerciale "Sì" con attribuzione · v1.5 Ransomfeed anticipato nell'MVP (M6) e verificato; roadmap: arricchimento on-demand (VirusTotal, Shodan) dopo il rilascio, monitor dei leak (IntelX, Dexpose) nel modulo Exposure, altre fonti candidate.
 
 ---
 
@@ -104,6 +104,7 @@
 │   │   │   ├── cisa_kev.py
 │   │   │   ├── epss.py
 │   │   │   ├── ransomware_live.py
+│   │   │   ├── ransomfeed.py
 │   │   │   ├── abusech/            # urlhaus.py, threatfox.py, malwarebazaar.py, feodo.py
 │   │   │   ├── otx.py
 │   │   │   └── csirt_it/           # misp.py, rss.py
@@ -250,6 +251,7 @@ class PostProcessor(ABC):
 | **CISA KEV** | `cisa_kev` | Catalogo KEV | Pubblico | ogni 6h | 3h | Feed JSON completo, diff con lo stato attuale. |
 | **EPSS** (FIRST) ✔ verificato | `epss` | Punteggio, percentile, versione del modello | CSV giornaliero `https://epss.empiricalsecurity.com/epss_scores-current.csv.gz` (redirect al file del giorno). L'API FIRST è pensata solo per consultazioni puntuali e non si usa per la sincronizzazione | giornaliera, dopo la pubblicazione (~13:30 UTC) | 12h | Punteggio attuale per ogni CVE (~385.000 righe); nello storico solo le variazioni rilevanti (§8.1). Versione del modello e data del punteggio si leggono dalla riga di commento del CSV. |
 | **ransomware.live** (API PRO) | `ransomware_live` | Gruppi, vittime (paese, settore, dominio, date) | **Chiave obbligatoria** `RANSOMWARE_LIVE_API_KEY` (`required_settings`), ottenuta da `my.ransomware.live`. Base URL `https://api-pro.ransomware.live`, documentazione `api-pro.ransomware.live/docs`. **L'API v2 gratuita senza chiave non si usa**: è dichiarata solo per uso personale. | ogni 1h | 30m | Vittime recenti e gruppi → entità vittima + avvistamento (§8.2). |
+| **Ransomfeed** ✔ verificato | `ransomfeed` | Rivendicazioni ransomware: vittima, gruppo, data, paese, sito web della vittima, settore, città e regione quando presenti, descrizione | API pubblica senza chiave, base URL `https://api.ransomfeed.it` (documentazione `https://ransomfeed.it/docs/`): senza filtri restituisce le ultime 100 rivendicazioni; filtri a percorso (`/country/{paese}`, `/gang/{gruppo}`, `/date/{anno}`, `/search/{testo}`) e numero di righe con `/offset/{n}` (default 100, massimo 1000) | ogni 1h | 30m | Ultime rivendicazioni → entità vittima + avvistamento (§8.2), chiave dell'avvistamento = `id` Ransomfeed. Le rivendicazioni recenti si rileggono a ogni run perché il paese e gli altri campi arrivano con l'analisi successiva (~6 h dopo il rilevamento): l'avvistamento si aggiorna. Primo caricamento: anno corrente con `/date/{anno}`, nei limiti delle 1.000 righe per richiesta; il modo di andare più indietro si verifica in implementazione. Nessun limite di richieste dichiarato: si applica un limite prudenziale di 1 richiesta ogni 10 s. Si usa l'API e non gli RSS, che contengono un sottoinsieme degli stessi dati. |
 | **abuse.ch** | `abusech.urlhaus`, `abusech.threatfox`, `abusech.malwarebazaar`, `abusech.feodo` | URL, IOC, metadati e hash dei campioni, C2 | Auth-Key `ABUSECH_AUTH_KEY` | 30m–1h | 15–30m | Export recenti, upsert IOC con avvistamenti per fonte. |
 | **AlienVault OTX** | `otx` | Pulse sottoscritti e indicatori | Chiave obbligatoria `OTX_API_KEY` | ogni 1h | 30m | Pulse modificati dopo il cursore. |
 | **CSIRT Italia – feed MISP** ✔ verificato | `csirt_it.misp` | Eventi MISP TLP:CLEAR: IOC, famiglie malware, campagne di phishing e smishing, DDoS, sfruttamento di vulnerabilità | Pubblico, `https://www.csirt.gov.it/feed-misp/` (feed MISP standard: `manifest.json`, `hashes.csv`, un JSON per evento) | ogni 1h | 30m | Scarica `manifest.json`, poi solo gli eventi nuovi o con timestamp cambiato; attributi → IOC, tag e galaxy → famiglia e tassonomia, tag TLP → classe (§10.2). |
@@ -267,6 +269,7 @@ Questi valori finiscono nei metadati `SourceLicense` di ogni collector e vengono
 | CISA KEV | **CC0 1.0 Universal** (verificato l'08/10/2026 su cisa.gov) | **Sì** | Nessuna | Non richiesta | Vietato usare logo CISA e sigillo DHS; l'uso dei dati non implica approvazione di CISA/DHS. Feed JSON unico (~1,7 MB); il server invia ETag e Last-Modified ma ha risposto 200 anche a una richiesta condizionale: le richieste ripetute le evita la cache con TTL |
 | EPSS | Pubblicazione libera, senza registrazione (FAQ FIRST, verificata l'08/10/2026) | **Sì**, con attribuzione | Nessuna per il CSV giornaliero | Richiesta: "EPSS scores from FIRST.org (https://www.first.org/epss), generated by Empirical Security." | Nessuna licenza formale: la FAQ dichiara l'uso libero e chiede l'attribuzione nei prodotti |
 | ransomware.live PRO | Termini e condizioni ransomware.live | **Sì**, dopo aver accettato i T&C | **Da riverificare** sulla pagina ufficiale dell'API PRO e nei T&C: sono emersi valori discordanti (500.000 chiamate/mese e 3.000 chiamate/giorno). Fino alla verifica il collector applica il limite più restrittivo (3.000/giorno) | Da verificare nei T&C | La pagina API indica la PRO (gratuita) per l'uso aziendale. T&C da leggere prima di attivare la chiave |
+| Ransomfeed | **CC BY 4.0** ("Ransomfeed © 2026 by Dario Fadda is licensed under CC BY 4.0", footer del sito, verificato il 09/10/2026) | **Sì**, con attribuzione | Nessuna dichiarata | Obbligatoria (CC BY 4.0): "Dati ransomware da Ransomfeed (https://ransomfeed.it), © Dario Fadda, licenza CC BY 4.0." | La pagina dei feed dichiara l'uso "sempre libero e aperto a tutti", anche in piattaforme commerciali. Il connettore OpenCTI di Ransomfeed è GPLv3 ma non si usa: Specula ha un proprio collector |
 | abuse.ch | Termini d'uso abuse.ch / Spamhaus | **Da verificare** | Limiti di query per gli utenti non commerciali (non numerici) | Da verificare | I termini prevedono che l'uso da parte di aziende con finalità commerciali o di profitto *possa* richiedere un abbonamento a pagamento gestito da Spamhaus. Va chiarito se l'uso interno difensivo di Eurosystem rientra |
 | AlienVault OTX | EULA OTX (LevelBlue) | **Da verificare** | 10.000 richieste/ora con chiave (dato da fonte secondaria, da confermare) | — | L'EULA dichiara OTX gratuito "per uso non commerciale" e vieta la redistribuzione. L'uso interno difensivo sembra compatibile, ma va confermato |
 | CSIRT Italia | Feed MISP TLP:CLEAR; note legali del portale ACN | **Da verificare** | Nessuna | ACN / CSIRT Italia | TLP:CLEAR permette la condivisione senza restrizioni, ma le note legali del portale ACN non concedono licenze e vietano riproduzione e uso commerciale senza autorizzazione scritta, salvo uso personale. Proposta: chiedere conferma scritta ad ACN (decisione aperta §11 #10) |
@@ -325,7 +328,7 @@ I campi grezzi di ogni fonte restano negli avvistamenti (colonna `raw`, JSONB), 
 
 ### 8.2 Vittime ransomware: entità e avvistamenti
 
-Le vittime sono gestite come gli IOC: **un'entità canonica** e **più avvistamenti**, uno per ogni fonte e pubblicazione. ransomware.live è la prima fonte; Ransomfeed (§13.2) e altre si aggiungeranno come nuovi avvistamenti, senza creare duplicati.
+Le vittime sono gestite come gli IOC: **un'entità canonica** e **più avvistamenti**, uno per ogni fonte e pubblicazione. Nell'MVP le fonti sono ransomware.live e Ransomfeed (§6.1): una vittima pubblicata da entrambe è una sola entità con due avvistamenti. Altre fonti si aggiungeranno allo stesso modo, senza creare duplicati.
 
 **`ransomware_victims` (entità)**
 
@@ -488,6 +491,10 @@ La classe è assegnata **dal collector, al momento della raccolta**, e non viene
 | 8 | Arricchimento AI | Approccio ibrido (§13.4): interfaccia comune con provider intercambiabili; provider remoto solo per dati `public`, provider locale su CPU per `internal` e `sensitive`; audit di ogni chiamata remota. Fuori MVP: nell'MVP esiste solo il campo `classification` |
 | 12 | TLS e rete nel LAB | **Certificato autofirmato** generato sulla VM dalla CA locale di Caddy (`tls internal`), valido per l'indirizzo 10.128.4.106. Per evitare l'avviso del browser, il certificato radice della CA di Caddy va installato sui PC degli analisti. Nessun proxy in uscita |
 | 14 | Destinazione dei backup | Cartella dedicata `specula-backup` (root, `700`) sul **disco dati da 3,6 TB** della macchina, fisicamente separato dal disco di sistema, resa disponibile in `/mnt/specula-backup` con un bind mount (§15.1) |
+| 15 | Ransomfeed | Anticipato nell'MVP, in M6 dopo ransomware.live, come seconda fonte di avvistamenti delle vittime (§6.1) |
+| 16 | Arricchimento on-demand (VirusTotal, Shodan) | Dopo il rilascio dell'MVP, con il meccanismo di §13.5 |
+| 17 | Monitor dei leak (IntelX, Dexpose) | Nel futuro modulo **Exposure**, non in Specula Threat (§13.6) |
+| 18 | Piani VirusTotal e Shodan | Il proprietario acquista piani compatibili con l'uso aziendale al posto di VirusTotal Public e Shodan Academic (§13.5). Quote e condizioni del piano acquistato si verificano e si riportano in §6.2 e in `SourceLicense` all'implementazione |
 
 ### 11.2 Aperte
 
@@ -526,9 +533,7 @@ Le fonti della roadmap usano gli stessi meccanismi già presenti nell'MVP: liste
 
 ### 13.2 Ransomfeed
 
-- Collector periodici `ransomfeed.rss` e `ransomfeed.api`.
-- Producono **avvistamenti** di vittime (§8.2): una vittima già nota da ransomware.live riceve un nuovo avvistamento, senza duplicati.
-- Classe `public`. Termini d'uso, eventuale chiave API e quota da verificare.
+Anticipato nell'MVP (decisione §11.1 #15): collector `ransomfeed` in §6.1 e §6.2, milestone M6.
 
 ### 13.3 Telegram
 
@@ -605,6 +610,66 @@ Ogni chiamata a un provider remoto genera una riga nell'audit log con: provider,
 - Sempre etichettato "generato da AI" nella UI. Le entità estratte sono collegamenti suggeriti e **non generano da sole eventi di severità Alta o Critica**.
 - Configurazione prevista: `AI_REMOTE_PROVIDER`, `AI_REMOTE_API_KEY` (solo nel container `enricher`), `AI_LOCAL_URL`, `AI_LOCAL_MODEL`.
 - È la base tecnica del futuro **briefing AI** (fuori MVP).
+
+### 13.5 Arricchimento on-demand: VirusTotal e Shodan
+
+Dopo il rilascio dell'MVP (decisione §11.1 #16). Serve una specifica dedicata; qui si fissano i vincoli.
+
+**Cosa fa.** Dal dettaglio di un IOC un Analyst preme "Arricchisci" e ottiene il quadro della fonte esterna:
+- **VirusTotal**: report esistenti di hash, IP, domini e URL (rilevamenti, prima e ultima analisi, reputazione);
+- **Shodan**: dati dell'host per un IP (porte, servizi, banner sintetici, CVE dichiarate da Shodan, organizzazione, ASN).
+
+**Flusso.** La regola "l'API non chiama mai fonti esterne" resta valida e le chiavi restano solo nello scheduler:
+1. l'API riceve `POST /api/v1/enrichments` (ruolo Analyst o superiore) e registra una riga in `enrichment_requests` (stato `queued`);
+2. un job dello scheduler preleva le richieste in coda e le esegue con il client HTTP condiviso (cache con TTL, rate limit, quote, retry);
+3. il risultato va in `enrichment_results` (campi di sintesi più `raw` JSONB) e la richiesta passa a `done` o `failed`;
+4. la UI interroga `GET /api/v1/enrichments/{id}` finché il risultato non è pronto.
+
+**Regole**
+- **Solo consultazione.** Nessun caricamento di file o URL per l'analisi: il codice non chiama gli endpoint di upload o di scansione e un test lo verifica. Il connettore OpenCTI lo faceva (`VIRUSTOTAL_FILE_UPLOAD_UNSEEN_ARTIFACTS`, `VIRUSTOTAL_URL_UPLOAD_UNSEEN`): per Specula significherebbe divulgare dati.
+- **Cosa si può inviare.** Il valore inviato a un servizio esterno ne rivela l'interesse. Si inviano solo IOC di classe `public`; gli indirizzi privati (RFC 1918, loopback, link-local) e i domini dell'organizzazione configurati dagli Admin sono rifiutati.
+- **Classe del risultato: `internal`.** Le ricerche del team dicono cosa sta indagando, anche quando il dato di partenza è pubblico.
+- **Audit.** Ogni richiesta registra utente, fornitore, tipo e valore dell'indicatore.
+- **Quote.** Limite giornaliero per fornitore (dalla `Quota` del collector) e per utente (configurabile). Un risultato in cache entro il TTL (proposta 24 h) non consuma quota.
+- Chiavi `VIRUSTOTAL_API_KEY` e `SHODAN_API_KEY`, solo nello scheduler.
+
+**Piani disponibili e condizioni (verificate il 09/10/2026)**
+- **VirusTotal Public**: 500 richieste al giorno e 4 al minuto. La documentazione ufficiale (*Public vs Premium API*) stabilisce che non va usata in prodotti o servizi commerciali, né in flussi di lavoro aziendali che non contribuiscono nuovi file. L'uso di Specula in Eurosystem, a nostra lettura, rientra almeno nel secondo caso: **con il piano Public l'integrazione non si fa**: si usa un piano a pagamento (decisione §11.1 #18).
+- **Shodan Academic**: 100 crediti di query e 100 di scansione al mese, monitoraggio di 16 IP; il filtro `vuln` funziona solo sul sito web, non via API. La pagina dell'offerta non parla di uso commerciale: si usa un piano a pagamento (decisione §11.1 #18). Il consumo di crediti per ciascun endpoint si verifica in implementazione.
+
+### 13.6 Monitor dei leak: IntelX e Dexpose (modulo Exposure)
+
+Fuori da Specula Threat: appartiene al futuro modulo **Exposure** (decisione §11.1 #17), che avrà una specifica propria. I principi seguenti valgono già, perché queste fonti restituiscono credenziali in chiaro.
+
+**Cosa fa.** Per una lista di domini monitorati, gestita dagli Admin e tracciata nell'audit log, mostra quanto l'organizzazione è esposta: dipendenti e utenti compromessi, log di infostealer, breach pubblici, menzioni, con date e andamento.
+
+**Cosa si salva e cosa no**
+- **Si salvano** conteggi e metadati: dominio, tipo (infostealer, combo, ULP, breach pubblico), famiglia dello stealer, data di compromissione e di pubblicazione, paese dell'host, nome del breach.
+- **Indirizzi email**: mai in chiaro. Si salvano un'impronta HMAC con chiave segreta (per riconoscere la stessa persona tra fonti e nel tempo) e una forma mascherata (es. `m***@dominio.it`).
+- **Mai**: password, hash delle password, cookie, token, alberi dei file delle macchine infette, contenuti di messaggi o post. Il collector li scarta prima di qualunque scrittura o log; un test verifica che nessuno di questi campi arrivi al database.
+- Classe `sensitive`, abilitazione di fonte (`source:dexpose`, `source:intelx`), audit di ogni lettura.
+- Prima dell'attivazione: valutazione privacy (GDPR), perché sono dati personali di dipendenti e utenti.
+
+**Dexpose** (DeXpose Search API, specifica OpenAPI letta il 09/10/2026)
+- Header `X-Dexpose-Token`; addebito a crediti per risultato; al massimo 5.000 risultati per ricerca (25 per pagina). La chiave ha scadenza, rotte e IP consentiti e un'opzione `censor_passwords`, da attivare sulla chiave aziendale.
+- Endpoint utili per il monitor: `POST /api/v1/domain_statistics` (statistiche aggregate per dominio, il più adatto a una raccolta periodica) e `GET /api/v1/api_key_details` (crediti residui, per la `Quota`). Le ricerche puntuali (`search_infostealer_data`, `all_credz_search`, `public_breaches_search`) restituiscono anche password: si usano solo per i conteggi, con lo scarto descritto sopra. `machine_info` (file delle macchine infette) non si usa.
+- Le ricerche su Telegram e forum (`search_telegram_messages`, `search_web_data`) sono da valutare come alternativa o complemento del listener Telegram (§13.3), con le stesse regole sui contenuti.
+
+**IntelX** (piano aziendale): endpoint, crediti e condizioni da verificare sulla documentazione ufficiale al momento della specifica.
+
+Per entrambi i fornitori le condizioni d'uso sono nel contratto aziendale: vanno riportate in `SourceLicense` e in §6.2 prima dell'attivazione.
+
+### 13.7 Altre fonti candidate
+
+Emerse dalla configurazione OpenCTI esistente del team. Ognuna richiede verifica di termini e limiti e una specifica prima dell'implementazione.
+
+| Fonte | Cosa porterebbe |
+|-------|-----------------|
+| **MITRE ATT&CK** | Tecniche, gruppi, malware e strumenti: contesto per gruppi ransomware e famiglie malware |
+| **abuse.ch SSLBL** | Certificati e IP dei C2 con TLS; sotto-fonte aggiuntiva della famiglia abuse.ch (§6.1) |
+| **AbuseIPDB** (blacklist) | IP segnalati con punteggio di confidenza; richiede una chiave |
+| **URLScan** (phishfeed) | URL di phishing recenti; richiede l'API PRO |
+| **Dataset OpenCTI** (settori, geografia) | Tassonomia dei settori e dei paesi per normalizzare le vittime |
 
 ## 14. Integrazione continua (CI) – requisito MVP
 

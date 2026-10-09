@@ -1,6 +1,6 @@
 # Specula Threat – Piano di implementazione dell'MVP
 
-> Stato: **APPROVATO – v1.0** (05/10/2026)
+> Stato: **BOZZA v1.1 – modifiche a §2, M6 e §3 in attesa di approvazione** (09/10/2026). La v1.0 resta approvata.
 > Riferimenti: [specifica-funzionale-dashboard.md](specifica-funzionale-dashboard.md) (v1.2) · [architettura.md](architettura.md) (v1.2) · [identita-visiva.md](identita-visiva.md)
 
 ---
@@ -27,7 +27,7 @@
 | **M3** | NVD, EPSS, livelli di priorità P1–P4 | M2; chiave NVD consigliata |
 | **M4** | Autenticazione, ruoli, abilitazioni e filtri per classe | M3 |
 | **M5** | Frontend base: login, KPI 1–5, vista Fonti, pagine CVE/KEV | M4; `docs/identita-visiva.md` approvato |
-| **M6** | ransomware.live (API PRO) e vittime come entità con avvistamenti | M5; quota verificata e T&C accettati; chiave PRO |
+| **M6** | ransomware.live (API PRO), Ransomfeed e vittime come entità con avvistamenti | M5; quota verificata e T&C accettati; chiave PRO |
 | **M7** | Fonti IOC: abuse.ch, AlienVault OTX, CSIRT Italia | M6; decisioni §11 #9 e #10 |
 | **M8** | Intel feed | M7 |
 | **M9** | Mappa, pannelli rimanenti, ricerca globale, esportazioni | M8 |
@@ -205,15 +205,16 @@
 
 ---
 
-## M6 – ransomware.live e vittime
+## M6 – ransomware.live, Ransomfeed e vittime
 
-**Obiettivo.** Introdurre il modello vittima/avvistamenti con la prima fonte ransomware.
+**Obiettivo.** Introdurre il modello vittima/avvistamenti con due fonti ransomware, così la deduplica tra fonti si verifica su dati reali già nell'MVP.
 
 **Prerequisiti:** quota dell'API PRO riverificata sulla pagina ufficiale e nei T&C (valori discordanti: 500.000/mese e 3.000/giorno), T&C letti e accettati, chiave PRO disponibile.
 
 **Contenuto**
 - Normalizzazione di nome azienda e dominio (Public Suffix List), tabella `generic_domains` con seed, regole di associazione e relazione `shared_domain` (architettura §8.2).
 - Collector `ransomware_live` con `RANSOMWARE_LIVE_API_KEY` obbligatoria e limite di quota prudenziale finché la verifica non è chiusa.
+- Collector `ransomfeed` (API pubblica senza chiave, CC BY 4.0, architettura §6.1 e §6.2): avvistamenti aggiuntivi delle stesse vittime, aggiornati quando Ransomfeed completa paese e settore.
 - Tabelle `ransomware_groups`, `ransomware_victims`, `victim_sightings`, `victim_relations`, `aliases`.
 - API ransomware e admin `merge` / `unmerge`; suggerimenti di unione.
 - KPI 6–7, pannelli "Top gruppi ransomware" e "Settori colpiti".
@@ -221,14 +222,17 @@
 **PR previste**
 1. `m6/victim-normalization` – normalizzazione, domini generici, regole di associazione (logica pura e test).
 2. `m6/ransomware-live-collector`
-3. `m6/api-ransomware-merge`
-4. `m6/ui-ransomware`
+3. `m6/ransomfeed-collector`
+4. `m6/api-ransomware-merge`
+5. `m6/ui-ransomware`
 
 **Criterio di completamento**
 - Criterio di accettazione 8: senza chiave il collector è disabilitato e l'API v2 gratuita non viene mai chiamata (test).
 - Test delle regole di associazione, inclusi i casi di dominio generico e di società diverse con lo stesso dominio.
 - Il limite di quota configurato viene rispettato (test del client HTTP).
 - La quota verificata è riportata in `SourceLicense` e nella tabella §6.2 dell'architettura.
+- Criterio di accettazione 10 su dati reali: almeno 3 vittime pubblicate sia da ransomware.live sia da Ransomfeed risultano una sola entità con due avvistamenti (verifica a campione sulla VM).
+- L'attribuzione CC BY 4.0 di Ransomfeed compare in `GET /sources` e nella pagina "Fonti e licenze".
 
 ---
 
@@ -348,5 +352,6 @@
 
 In ordine, come da decisioni approvate:
 1. **Entra ID (OIDC)**, primo sviluppo successivo (decisione #6).
-2. Fonti e funzioni della roadmap (architettura §13): Tenable.ONE, Ransomfeed, Telegram, arricchimento AI ibrido. Ognuna con una specifica dedicata da approvare prima dell'implementazione.
-3. Moduli fuori ambito della specifica §8 (Third-Party Risk, briefing AI, notifiche, …), da pianificare separatamente.
+2. Fonti e funzioni della roadmap (architettura §13): Tenable.ONE, Telegram, arricchimento AI ibrido, arricchimento on-demand con VirusTotal e Shodan (§13.5, con i piani a pagamento della decisione #18), altre fonti candidate (§13.7). Ognuna con una specifica dedicata da approvare prima dell'implementazione.
+3. Modulo **Exposure**, con il monitor dei leak IntelX e Dexpose (architettura §13.6): specifica propria e valutazione privacy prima dello sviluppo.
+4. Moduli fuori ambito della specifica §8 (Third-Party Risk, briefing AI, notifiche, …), da pianificare separatamente.
