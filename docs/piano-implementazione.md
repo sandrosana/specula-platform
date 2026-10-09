@@ -352,6 +352,6 @@
 
 In ordine, come da decisioni approvate:
 1. **Entra ID (OIDC)**, primo sviluppo successivo (decisione #6).
-2. Fonti e funzioni della roadmap (architettura §13): Tenable.ONE, Telegram, arricchimento AI ibrido, arricchimento on-demand con VirusTotal e Shodan (§13.5, dopo le decisioni aperte #18 e #19), altre fonti candidate (§13.7). Ognuna con una specifica dedicata da approvare prima dell'implementazione.
+2. Fonti e funzioni della roadmap (architettura §13): Tenable.ONE, Telegram, arricchimento AI ibrido, arricchimento on-demand con VirusTotal e Shodan (§13.5, con i piani a pagamento della decisione #18), altre fonti candidate (§13.7). Ognuna con una specifica dedicata da approvare prima dell'implementazione.
 3. Modulo **Exposure**, con il monitor dei leak IntelX e Dexpose (architettura §13.6): specifica propria e valutazione privacy prima dello sviluppo.
 4. Moduli fuori ambito della specifica §8 (Third-Party Risk, briefing AI, notifiche, …), da pianificare separatamente.

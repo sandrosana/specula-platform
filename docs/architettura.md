@@ -494,6 +494,7 @@ La classe è assegnata **dal collector, al momento della raccolta**, e non viene
 | 15 | Ransomfeed | Anticipato nell'MVP, in M6 dopo ransomware.live, come seconda fonte di avvistamenti delle vittime (§6.1) |
 | 16 | Arricchimento on-demand (VirusTotal, Shodan) | Dopo il rilascio dell'MVP, con il meccanismo di §13.5 |
 | 17 | Monitor dei leak (IntelX, Dexpose) | Nel futuro modulo **Exposure**, non in Specula Threat (§13.6) |
+| 18 | Piani VirusTotal e Shodan | Il proprietario acquista piani compatibili con l'uso aziendale al posto di VirusTotal Public e Shodan Academic (§13.5). Quote e condizioni del piano acquistato si verificano e si riportano in §6.2 e in `SourceLicense` all'implementazione |
 
 ### 11.2 Aperte
 
@@ -503,8 +504,6 @@ La classe è assegnata **dal collector, al momento della raccolta**, e non viene
 | 10 | CSIRT Italia | Chiedere ad ACN conferma scritta sul riuso del feed MISP e degli avvisi RSS in una piattaforma interna; fino ad allora, per gli avvisi solo titolo, link, data e CVE estratte |
 | 11 | Associazione delle vittime | Finestra di ±14 giorni ed elenco delle forme giuridiche come in §8.2 |
 | 13 | Provider AI (roadmap) | Scelta del provider remoto e del modello locale per CPU, da fare prima di avviare §13.4 |
-| 18 | Piano VirusTotal | Il piano Public in uso non è compatibile con l'uso in Eurosystem (§13.5). Proposta: valutare il piano Premium prima di avviare §13.5; fino ad allora VirusTotal non si integra |
-| 19 | Piano Shodan | Con la membership Academic: 100 crediti di query al mese e uso commerciale non indicato nella pagina dell'offerta. Proposta: verificare i termini con Shodan (o passare a un piano a pagamento) prima di avviare §13.5 |
 
 ## 12. Riutilizzo del codice esistente e rimozione degli script legacy
 
@@ -635,8 +634,8 @@ Dopo il rilascio dell'MVP (decisione §11.1 #16). Serve una specifica dedicata; 
 - Chiavi `VIRUSTOTAL_API_KEY` e `SHODAN_API_KEY`, solo nello scheduler.
 
 **Piani disponibili e condizioni (verificate il 09/10/2026)**
-- **VirusTotal Public**: 500 richieste al giorno e 4 al minuto. La documentazione ufficiale (*Public vs Premium API*) stabilisce che non va usata in prodotti o servizi commerciali, né in flussi di lavoro aziendali che non contribuiscono nuovi file. L'uso di Specula in Eurosystem, a nostra lettura, rientra almeno nel secondo caso: **con il piano Public l'integrazione non si fa** (decisione aperta §11.2 #18).
-- **Shodan Academic**: 100 crediti di query e 100 di scansione al mese, monitoraggio di 16 IP; il filtro `vuln` funziona solo sul sito web, non via API. La pagina dell'offerta non parla di uso commerciale: va verificato con Shodan (decisione aperta §11.2 #19). Il consumo di crediti per ciascun endpoint si verifica in implementazione.
+- **VirusTotal Public**: 500 richieste al giorno e 4 al minuto. La documentazione ufficiale (*Public vs Premium API*) stabilisce che non va usata in prodotti o servizi commerciali, né in flussi di lavoro aziendali che non contribuiscono nuovi file. L'uso di Specula in Eurosystem, a nostra lettura, rientra almeno nel secondo caso: **con il piano Public l'integrazione non si fa**: si usa un piano a pagamento (decisione §11.1 #18).
+- **Shodan Academic**: 100 crediti di query e 100 di scansione al mese, monitoraggio di 16 IP; il filtro `vuln` funziona solo sul sito web, non via API. La pagina dell'offerta non parla di uso commerciale: si usa un piano a pagamento (decisione §11.1 #18). Il consumo di crediti per ciascun endpoint si verifica in implementazione.
 
 ### 13.6 Monitor dei leak: IntelX e Dexpose (modulo Exposure)
 
