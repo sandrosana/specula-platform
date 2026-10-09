@@ -1,6 +1,6 @@
 # Specula Threat – Specifica funzionale della dashboard
 
-> Stato: **BOZZA v1.3 – modifiche a intestazione, §4.2, §4.3, §8, §10 in attesa di approvazione** (09/10/2026). La v1.2 resta approvata.
+> Stato: **APPROVATO – v1.3** (09/10/2026)
 > Prodotto: **Specula Threat**, modulo di Threat Intelligence della piattaforma **Specula** (moduli futuri: Exposure, Third Party, OSINT, CLOSINT).
 > Ambito: MVP. Fonti dati: NVD, CISA KEV, EPSS, ransomware.live (API PRO), Ransomfeed, abuse.ch, AlienVault OTX, CSIRT Italia.
 > Documenti collegati: [architettura.md](architettura.md) · [identita-visiva.md](identita-visiva.md)

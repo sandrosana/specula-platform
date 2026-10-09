@@ -1,6 +1,6 @@
 # Specula Threat – Piano di implementazione dell'MVP
 
-> Stato: **BOZZA v1.1 – modifiche a §2, M6 e §3 in attesa di approvazione** (09/10/2026). La v1.0 resta approvata.
+> Stato: **APPROVATO – v1.1** (09/10/2026)
 > Riferimenti: [specifica-funzionale-dashboard.md](specifica-funzionale-dashboard.md) (v1.2) · [architettura.md](architettura.md) (v1.2) · [identita-visiva.md](identita-visiva.md)
 
 ---
