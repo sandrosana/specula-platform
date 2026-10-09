@@ -1,6 +1,6 @@
 # Specula Threat – Piano di implementazione dell'MVP
 
-> Stato: **APPROVATO – v1.1** (09/10/2026)
+> Stato: **BOZZA v1.2 – modifiche a M4 in attesa di approvazione** (09/10/2026). La v1.1 resta approvata.
 > Riferimenti: [specifica-funzionale-dashboard.md](specifica-funzionale-dashboard.md) (v1.2) · [architettura.md](architettura.md) (v1.2) · [identita-visiva.md](identita-visiva.md)
 
 ---
@@ -152,22 +152,25 @@
 **Obiettivo.** Rendere la piattaforma utilizzabile in sicurezza da un team: chi accede, cosa può fare, cosa può vedere.
 
 **Contenuto**
-- Utenti locali (argon2), login/logout, cookie di sessione HttpOnly, CSRF token, `GET /auth/me`; comando CLI per creare il primo Admin.
+- Utenti locali secondo architettura §10.4: argon2id, regole sulle password con lista locale, login/logout, sessioni (10 ore, 60 minuti di inattività), cookie HttpOnly, CSRF token, blocco dopo 5 errori, `GET /auth/me`; comando CLI per creare il primo Admin.
+- TOTP obbligatorio per gli Admin: attivazione con QR, codici di recupero, reset da un altro Admin o da riga di comando.
 - Ruoli Viewer / Analyst / Admin con dipendenze FastAPI su ogni endpoint di scrittura.
 - Abilitazioni `user_grants` (`class:internal`, `class:sensitive`, `source:<nome>`).
 - Filtro per classe nel livello di repository, applicato a tutte le letture; impostazione degli aggregati per classe.
 - `audit_log` per modifiche, run forzati e letture di dati `sensitive`.
 - API admin: utenti e abilitazioni, `POST /admin/collectors/{name}/run`, `GET /admin/system` (stato backup).
-- Rimozione della restrizione temporanea sul proxy.
+- La regola LAN-only sul proxy resta come difesa aggiuntiva finché la piattaforma non viene pubblicata fuori dalla LAN (architettura §10.4).
 
 **PR previste**
 1. `m4/local-auth`
-2. `m4/roles-audit`
-3. `m4/classification-filters`
-4. `m4/admin-api`
+2. `m4/admin-totp`
+3. `m4/roles-audit`
+4. `m4/classification-filters`
+5. `m4/admin-api`
 
 **Criterio di completamento**
-- Ogni endpoint ha un test con un ruolo non autorizzato che riceve 403.
+- Ogni endpoint ha un test con un ruolo non autorizzato che riceve 403, e un test senza login che riceve 401.
+- Test di sicurezza dell'accesso: blocco dopo 5 errori e sblocco dopo 15 minuti, scadenza per inattività e per durata massima, CSRF mancante o errato rifiutato, stesso errore per utente inesistente e password errata, password della lista rifiutata, Admin senza codice TOTP valido senza sessione, codice TOTP non riutilizzabile.
 - Un test con righe `sensitive` di prova dimostra che un utente senza abilitazione non le vede **né negli elenchi né nei conteggi**; lo stesso vale per un Admin senza abilitazione esplicita.
 - Una riga inserita senza classe risulta `sensitive` (test).
 - Run forzato e modifiche agli utenti compaiono nell'audit log (criterio di accettazione 6).

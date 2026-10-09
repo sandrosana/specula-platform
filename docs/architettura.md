@@ -1,10 +1,10 @@
 # Specula Threat – Architettura
 
-> Stato: **APPROVATO – v1.5** (09/10/2026). Le decisioni ancora aperte sono elencate in §11.2.
+> Stato: **BOZZA v1.6 – modifiche a §8.1, §10.4, §11 in attesa di approvazione** (09/10/2026). La v1.5 resta approvata. Le decisioni ancora aperte sono elencate in §11.2.
 > Prodotto: **Specula Threat**, modulo di Threat Intelligence della piattaforma **Specula** (moduli futuri: Exposure, Third Party, OSINT, CLOSINT). Repository: `specula-platform`.
 > Documenti collegati: [specifica-funzionale-dashboard.md](specifica-funzionale-dashboard.md) · [identita-visiva.md](identita-visiva.md)
 >
-> Versioni: v1.0 approvazione iniziale · v1.1 modifica editoriale (nome del prodotto e del progetto compose), nessuna modifica tecnica · v1.2 ambiente LAB (Debian, IP, nessun proxy) e decisioni #12 (TLS) e #14 (backup) · v1.3 §15 dettagli di implementazione del backup (file marcatore, generazione della chiave, stato in file fino a M4, prova di ripristino in container) · v1.4 NVD ed EPSS verificati sulle fonti ufficiali (endpoint, limiti, licenze); EPSS: punteggio attuale più storico delle sole variazioni rilevanti, uso commerciale "Sì" con attribuzione · v1.5 Ransomfeed anticipato nell'MVP (M6) e verificato; roadmap: arricchimento on-demand (VirusTotal, Shodan) dopo il rilascio, monitor dei leak (IntelX, Dexpose) nel modulo Exposure, altre fonti candidate.
+> Versioni: v1.0 approvazione iniziale · v1.1 modifica editoriale (nome del prodotto e del progetto compose), nessuna modifica tecnica · v1.2 ambiente LAB (Debian, IP, nessun proxy) e decisioni #12 (TLS) e #14 (backup) · v1.3 §15 dettagli di implementazione del backup (file marcatore, generazione della chiave, stato in file fino a M4, prova di ripristino in container) · v1.4 NVD ed EPSS verificati sulle fonti ufficiali (endpoint, limiti, licenze); EPSS: punteggio attuale più storico delle sole variazioni rilevanti, uso commerciale "Sì" con attribuzione · v1.5 Ransomfeed anticipato nell'MVP (M6) e verificato; roadmap: arricchimento on-demand (VirusTotal, Shodan) dopo il rilascio, monitor dei leak (IntelX, Dexpose) nel modulo Exposure, altre fonti candidate · v1.6 autenticazione locale di M4 (§10.4, decisione #19): sessioni, regole sulle password, blocco dei tentativi, TOTP per gli Admin; chiave di ordinamento delle priorità salvata (§8.1).
 
 ---
 
@@ -302,7 +302,7 @@ Tutte le tabelle di entità, avvistamenti ed eventi hanno la colonna `classifica
 
 | Tabella | Chiave naturale | Contenuto principale |
 |---------|-----------------|----------------------|
-| `vulnerabilities` | `cve_id` | descrizione, published/modified, CVSS v3/v4, CWE, stato NVD, `priority_level` (P1–P4) e `priority_reason` calcolati |
+| `vulnerabilities` | `cve_id` | descrizione, published/modified, CVSS v3/v4, CWE, stato NVD, `priority_level` (P1–P4) e `priority_reason` calcolati, più la chiave di ordinamento del livello (`priority_rank`, `priority_kev_date`, `priority_sort_first`, `priority_sort_second`) con indice, così l'elenco per priorità non riordina tutte le CVE a ogni richiesta |
 | `vulnerability_products` | (cve, vendor, product) | da CPE |
 | `kev_entries` | `cve_id` | vendor, product, date_added, due_date, ransomware_use, required_action |
 | `epss_scores` | `cve_id` | punteggio **attuale**: epss, percentile, data del punteggio, versione del modello |
@@ -319,7 +319,7 @@ Tutte le tabelle di entità, avvistamenti ed eventi hanno la colonna `classifica
 | `advisories` | (source, guid) | avvisi CSIRT Italia: titolo, link, data, CVE estratte |
 | `events` | `id` | tipo, severità, occurred_at, titolo, entità collegate (JSONB), fonti, chiave di dedup |
 | `topics` | `id` | owner, visibilità, criteri, follower |
-| `users`, `roles`, `user_grants`, `audit_log` | | autenticazione, ruoli, abilitazioni per classe e fonte, tracciamento |
+| `users`, `roles`, `user_grants`, `sessions`, `audit_log` | | autenticazione, ruoli, abilitazioni per classe e fonte, sessioni e TOTP (§10.4), tracciamento |
 | `collector_runs`, `collector_state`, `source_usage` | | run, cursori e checkpoint, heartbeat, consumo quote |
 | `http_cache` | `key` | §7.1 |
 | `aliases` | (kind, alias) | normalizzazione di gruppi e famiglie |
@@ -475,6 +475,42 @@ La classe è assegnata **dal collector, al momento della raccolta**, e non viene
 - Il frontend fa escaping di tutti i contenuti esterni.
 - Il database non è esposto fuori dalla rete compose; l'unica porta pubblica è il proxy (443).
 
+### 10.4 Autenticazione e sessioni (utenti locali, M4)
+
+Decisione §11.1 #19. Vale fino all'arrivo di Entra ID (decisione #6), che porterà login e MFA del tenant aziendale.
+
+**Accesso**
+- Si entra con **email e password**. Senza login l'API risponde `401` a tutto tranne `GET /health`: anche i dati `public` richiedono un utente autenticato (§10.1).
+- Password salvate con **argon2id** (`argon2-cffi`, parametri predefiniti della libreria), mai in chiaro né nei log.
+- Stesso messaggio d'errore per utente inesistente, password errata o account bloccato, e stesso tempo di risposta (con utente inesistente si calcola comunque un hash): il login non rivela quali email esistono.
+
+**Regole sulle password** (NIST SP 800-63B)
+- Da 14 a 128 caratteri, qualunque carattere ammesso; nessuna regola di complessità e nessuna scadenza periodica.
+- Rifiutate se compaiono in una **lista locale di password comuni o trapelate**, versionata nel repository (fonte e licenza verificate in implementazione), o se contengono la parte locale dell'email. Nessuna chiamata a servizi esterni.
+- Una password impostata da un Admin è temporanea: al primo accesso l'utente deve cambiarla.
+
+**Sessioni**
+- Tabella `sessions`: token casuale di 256 bit, salvato solo come hash SHA-256; cookie `specula_session` con `HttpOnly`, `Secure`, `SameSite=Strict`.
+- Durata massima **10 ore** dal login, scadenza dopo **60 minuti di inattività**. L'ultimo accesso si aggiorna al massimo una volta al minuto.
+- Logout, cambio password, cambio di ruolo o di abilitazioni e disattivazione dell'utente chiudono tutte le sue sessioni.
+- **CSRF:** token legato alla sessione, restituito da `POST /auth/login` e `GET /auth/me`, da inviare nell'header `X-CSRF-Token` in ogni richiesta che modifica dati; in più si verifica l'header `Origin`.
+
+**Tentativi falliti**
+- **5 errori consecutivi** bloccano l'account per **15 minuti**; si sblocca da solo e il contatore si azzera al primo login riuscito.
+- Limite anche per indirizzo IP: oltre 20 tentativi falliti in 10 minuti la risposta è `429`.
+- Ogni blocco va nell'audit log.
+
+**MFA per gli Admin (TOTP)**
+- Obbligatoria per il ruolo **Admin**: codice di 6 cifre da app di autenticazione (RFC 6238, passo di 30 s, tolleranza di un passo). Lo stesso codice non è accettato due volte.
+- Login in due passi: dopo la password l'Admin riceve uno stato "in attesa del codice" e la sessione nasce solo con `POST /auth/totp`.
+- **Attivazione:** al primo accesso da Admin (anche dopo una promozione) l'utente scansiona il QR (`otpauth://`) e conferma con un codice; riceve **10 codici di recupero** monouso, salvati solo come hash.
+- Il segreto TOTP è cifrato nel database con una chiave derivata da `SECRET_KEY` (obbligatoria per il container `api` da M4). Ruotare `SECRET_KEY` richiede di riattivare il TOTP: la procedura va nel runbook operativo.
+- Reset del TOTP di un Admin: da un altro Admin oppure da riga di comando sulla VM; sempre nell'audit log.
+
+**Audit:** login riusciti e falliti, blocchi, logout, cambi di password, attivazione e reset del TOTP, creazione e modifica di utenti, ruoli e abilitazioni.
+
+**Proxy:** la regola LAN-only di Caddy (§3, decisione #12) **resta** anche dopo M4, come difesa aggiuntiva, finché la piattaforma non verrà pubblicata fuori dalla LAN.
+
 ## 11. Decisioni
 
 ### 11.1 Approvate
@@ -495,6 +531,7 @@ La classe è assegnata **dal collector, al momento della raccolta**, e non viene
 | 16 | Arricchimento on-demand (VirusTotal, Shodan) | Dopo il rilascio dell'MVP, con il meccanismo di §13.5 |
 | 17 | Monitor dei leak (IntelX, Dexpose) | Nel futuro modulo **Exposure**, non in Specula Threat (§13.6) |
 | 18 | Piani VirusTotal e Shodan | Il proprietario acquista piani compatibili con l'uso aziendale al posto di VirusTotal Public e Shodan Academic (§13.5). Quote e condizioni del piano acquistato si verificano e si riportano in §6.2 e in `SourceLicense` all'implementazione |
+| 19 | Autenticazione locale (M4) | Email e password argon2id; password da 14 caratteri con lista locale di password comuni; sessioni di 10 ore con scadenza dopo 60 minuti di inattività; blocco di 15 minuti dopo 5 errori; TOTP obbligatorio per gli Admin (§10.4) |
 
 ### 11.2 Aperte
 
