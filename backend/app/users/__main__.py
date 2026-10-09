@@ -4,6 +4,8 @@ python -m app.users create-admin --email name@example.com
     asks the password twice without echo; with --password-stdin it reads one
     line from standard input instead (for scripts). The password is never a
     command-line argument, so it does not end up in the shell history.
+python -m app.users reset-totp --email name@example.com
+    removes the second factor of a user who lost the phone and the recovery codes.
 """
 
 import argparse
@@ -19,6 +21,7 @@ from app.core.db import create_engine, create_session_factory
 from app.core.logging import configure_logging
 from app.models import UserRow
 from app.services.auth import create_user, normalize_email
+from app.services.mfa import reset_second_factor
 from app.services.passwords import MIN_LENGTH, password_problems
 
 
@@ -30,6 +33,10 @@ def build_parser() -> argparse.ArgumentParser:
     admin.add_argument(
         "--password-stdin", action="store_true", help="read the password from standard input"
     )
+    reset = commands.add_parser(
+        "reset-totp", help="remove a user's second factor: enrolment again at the next login"
+    )
+    reset.add_argument("--email", required=True)
     return parser
 
 
@@ -61,10 +68,29 @@ async def create_admin(settings: Settings, email: str, password: str) -> int:
         await engine.dispose()
 
 
+async def reset_totp(settings: Settings, email: str) -> int:
+    engine = create_engine(settings)
+    try:
+        async with create_session_factory(engine).begin() as session:
+            user = await session.scalar(
+                select(UserRow).where(UserRow.email == normalize_email(email))
+            )
+            if user is None:
+                print("No user with this email.", file=sys.stderr)
+                return 1
+            await reset_second_factor(session, user)
+            print(f"Second factor removed for {user.email}; all their sessions are closed.")
+            return 0
+    finally:
+        await engine.dispose()
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     settings = get_settings()
     configure_logging(settings.log_level)
+    if args.command == "reset-totp":
+        return asyncio.run(reset_totp(settings, args.email))
     if "@" not in args.email:
         print("The email address is not valid.", file=sys.stderr)
         return 2

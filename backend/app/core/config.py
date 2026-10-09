@@ -17,6 +17,7 @@ LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 DATABASE_URL_SCHEME = "postgresql+asyncpg://"
 COLLECTOR_ENV_PREFIX = "COLLECTOR_"
+SECRET_KEY_MIN_LENGTH = 32
 
 
 def _collector_environment() -> dict[str, str]:
@@ -47,6 +48,10 @@ class Settings(BaseSettings):
     # docs/specifica §6) and whose crossing is kept in the EPSS history.
     epss_threshold: float = Field(default=0.5, gt=0, lt=1)
 
+    # Encrypts the Admins' TOTP secrets (docs/architettura.md §10.4). Required by the api
+    # container in production; at least 32 characters, e.g. `openssl rand -base64 48`.
+    secret_key: SecretStr | None = None
+
     # Source API keys: only the scheduler container receives them.
     nvd_api_key: SecretStr | None = None
     ransomware_live_api_key: SecretStr | None = None
@@ -58,6 +63,7 @@ class Settings(BaseSettings):
 
     @field_validator(
         "https_proxy",
+        "secret_key",
         "nvd_api_key",
         "ransomware_live_api_key",
         "abusech_auth_key",
@@ -69,6 +75,13 @@ class Settings(BaseSettings):
     def _empty_means_unset(cls, value: object) -> object:
         # `.env.example` lists optional variables with empty values (e.g. HTTPS_PROXY=).
         return None if isinstance(value, str) and not value.strip() else value
+
+    @field_validator("secret_key")
+    @classmethod
+    def _long_secret_key(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value()) < SECRET_KEY_MIN_LENGTH:
+            raise ValueError(f"SECRET_KEY must be at least {SECRET_KEY_MIN_LENGTH} characters")
+        return value
 
     @field_validator("log_level", mode="before")
     @classmethod

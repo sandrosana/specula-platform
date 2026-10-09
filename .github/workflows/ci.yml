@@ -110,6 +110,7 @@ jobs:
       # Dummy values: only used to render and validate the configuration.
       POSTGRES_PASSWORD: ci-not-a-secret
       BACKUP_AGE_RECIPIENT: age1ci0000000000000000000000000000000000000000000000000000000
+      SECRET_KEY: ci-not-a-secret-ci-not-a-secret-ci-not-a-secret
     steps:
       - uses: actions/checkout@v4
       - name: Validate compose file
@@ -220,4 +221,13 @@ jobs:
         run: |
           docker run --rm -e DATABASE_URL=postgresql+asyncpg://u:p@127.0.0.1:1/db specula-backend:ci \
             python -c "from app.main import create_app; create_app(); print('app ok')"
+          # Data files ship inside the package (common password list, docs/architettura.md 10.4).
+          docker run --rm -e DATABASE_URL=postgresql+asyncpg://u:p@127.0.0.1:1/db specula-backend:ci \
+            python -c "from app.services.passwords import common_passwords; assert len(common_passwords()) > 400; print('password list ok')"
+          # Without SECRET_KEY the api must refuse to start in production.
+          if docker run --rm -e ENVIRONMENT=production -e DATABASE_URL=postgresql+asyncpg://u:p@127.0.0.1:1/db \
+            specula-backend:ci python -c "from app.main import create_app; create_app()" 2> /dev/null; then
+            echo "api started without SECRET_KEY"; exit 1
+          fi
+          echo "SECRET_KEY check ok"
           docker run --rm specula-backend:ci alembic --help > /dev/null && echo "alembic ok"

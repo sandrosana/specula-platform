@@ -94,6 +94,12 @@ services:
 
   api:
     <<: *backend
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-specula}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@db:5432/${POSTGRES_DB:-specula}
+      # Encrypts the Admins' second-factor secrets (docs/architettura.md §10.4).
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env}
     networks:
       - web
       - data
