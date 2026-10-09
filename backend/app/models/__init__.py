@@ -2,6 +2,7 @@
 
 from app.models.base import Base, ClassifiedMixin, classification_type
 from app.models.collector import CollectorRun, CollectorState, HttpCacheEntry, SourceUsage
+from app.models.epss import EpssHistoryRow, EpssScoreRow
 from app.models.kev import KevEntryRow
 from app.models.vulnerability import VulnerabilityProductRow, VulnerabilityRow
 
@@ -10,6 +11,8 @@ __all__ = [
     "ClassifiedMixin",
     "CollectorRun",
     "CollectorState",
+    "EpssHistoryRow",
+    "EpssScoreRow",
     "HttpCacheEntry",
     "KevEntryRow",
     "SourceUsage",

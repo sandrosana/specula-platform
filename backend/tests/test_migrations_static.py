@@ -18,7 +18,7 @@ def _scripts() -> ScriptDirectory:
 
 
 def test_single_head() -> None:
-    assert _scripts().get_heads() == ["0006"]
+    assert _scripts().get_heads() == ["0007"]
 
 
 def test_baseline_enum_matches_classification() -> None:
