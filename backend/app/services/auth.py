@@ -11,6 +11,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import LoginFailureRow, SessionRow, UserRow
+from app.services import audit
 from app.services.passwords import (
     DUMMY_HASH,
     hash_password,
@@ -92,6 +93,14 @@ async def register_failure(session: AsyncSession, user: UserRow, ip: str, at: da
         user.locked_until = at + LOCK_FOR
         user.failed_logins = 0
         logger.warning("user %d locked for %s after failed logins", user.id, LOCK_FOR)
+        audit.record(
+            session,
+            "auth.lock",
+            "success",
+            user=user,
+            ip=ip,
+            details={"minutes": int(LOCK_FOR.total_seconds() // 60)},
+        )
     await _record_failure(session, ip, at)
 
 
@@ -106,20 +115,28 @@ async def authenticate(
     at = now or utcnow()
     if await ip_failures(session, ip, at) >= IP_FAILURE_LIMIT:
         logger.warning("login refused: too many failures from one address")
+        audit.record(session, "auth.login", "denied", ip=ip, details={"reason": "ip_limited"})
         return LoginResult("ip_limited")
 
     user = await session.scalar(select(UserRow).where(UserRow.email == normalize_email(email)))
     if user is None:
         verify_password(DUMMY_HASH, password)
         await _record_failure(session, ip, at)
+        # The typed email is not logged: it may be a password typed in the wrong field.
+        audit.record(session, "auth.login", "failure", ip=ip, details={"reason": "unknown_user"})
         return LoginResult("invalid")
 
     password_ok = verify_password(user.password_hash, password)
     if is_locked(user, at) or not user.is_active:
         await _record_failure(session, ip, at)
         logger.warning("login refused for user %d: locked or disabled", user.id)
+        reason = "locked" if is_locked(user, at) else "disabled"
+        audit.record(session, "auth.login", "denied", user=user, ip=ip, details={"reason": reason})
         return LoginResult("invalid")
     if not password_ok:
+        audit.record(
+            session, "auth.login", "failure", user=user, ip=ip, details={"reason": "password"}
+        )
         await register_failure(session, user, ip, at)
         return LoginResult("invalid")
 
@@ -127,8 +144,17 @@ async def authenticate(
         user.password_hash = hash_password(password)
     if requires_second_factor(user):
         # Counters are reset only once the second factor is accepted too.
+        audit.record(
+            session,
+            "auth.login",
+            "success",
+            user=user,
+            ip=ip,
+            details={"second_factor": "pending"},
+        )
         return LoginResult("ok", user)
     login_succeeded(user, at)
+    audit.record(session, "auth.login", "success", user=user, ip=ip)
     return LoginResult("ok", user)
 
 

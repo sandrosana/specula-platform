@@ -3,6 +3,7 @@
 import asyncio
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
@@ -12,6 +13,7 @@ from app.api.deps import CSRF_HEADER
 from app.core.config import Settings
 from app.core.db import create_session_factory
 from app.main import create_app
+from app.services import totp
 from app.services.auth import create_user
 
 PASSWORD = "violet-harbour-lantern-92"
@@ -82,3 +84,18 @@ def logged_in(
     with api_client(database_url, settings) as client:
         login(client, email)
         yield client
+
+
+def login_admin(client: TestClient, email: str) -> str:
+    """Password, second-factor enrolment and first code. Returns the full session CSRF token."""
+    csrf = login(client, email)
+    setup = client.post("/api/v1/auth/totp/setup", headers=csrf_headers(csrf))
+    assert setup.status_code == 200, setup.text
+    secret = setup.json()["secret"]
+    code = totp.code_at(secret, totp.step_at(datetime.now(UTC)))
+    activated = client.post(
+        "/api/v1/auth/totp/activate", json={"code": code}, headers=csrf_headers(csrf)
+    )
+    assert activated.status_code == 200, activated.text
+    token: str = activated.json()["user"]["csrf_token"]
+    return token
