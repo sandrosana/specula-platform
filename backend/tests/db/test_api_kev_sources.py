@@ -16,7 +16,7 @@ from app.collectors.registry import resolve
 from app.collectors.status import publish_configs, publish_next_run
 from app.core.config import Settings
 from app.core.db import create_session_factory
-from app.main import create_app
+from tests.db.auth import logged_in
 from tests.db.helpers import DB_TEST_MARKS
 
 pytestmark = DB_TEST_MARKS
@@ -99,7 +99,7 @@ def api(migrated_database_url: str) -> Iterator[TestClient]:
         otx_api_key=SecretStr("never-exposed-key"),
         collector_env={},
     )
-    with TestClient(create_app(settings)) as client:
+    with logged_in(migrated_database_url, settings=settings) as client:
         yield client
 
 
