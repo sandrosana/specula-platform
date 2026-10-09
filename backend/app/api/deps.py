@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Annotated, cast
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.core.classification import Classification
@@ -63,7 +63,19 @@ class Auth:
     user: UserRow
 
 
-async def _session_auth(request: Request, db: SessionDep) -> Auth:
+CsrfHeader = Annotated[
+    str | None,
+    Header(
+        alias=CSRF_HEADER,
+        description=(
+            "CSRF token of the session (from POST /auth/login or GET /auth/me). "
+            "Required by every request that changes data."
+        ),
+    ),
+]
+
+
+async def _session_auth(request: Request, db: SessionDep, csrf: CsrfHeader = None) -> Auth:
     """The session of the request, complete or waiting for the second factor.
 
     Writes (non-GET requests) also need the CSRF token of the session and, when
@@ -79,7 +91,8 @@ async def _session_auth(request: Request, db: SessionDep) -> Auth:
     row, user = found
     if request.method not in SAFE_METHODS:
         check_origin(request)
-        sent = request.headers.get(CSRF_HEADER, "")
+        # Declared as a header parameter so the interactive API docs offer a field for it.
+        sent = csrf or ""
         if not secrets.compare_digest(sent.encode(), row.csrf_token.encode()):
             raise HTTPException(status_code=403, detail="Missing or invalid CSRF token.")
     return Auth(session=row, user=user)
