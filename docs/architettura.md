@@ -1,6 +1,6 @@
 # Specula Threat – Architettura
 
-> Stato: **BOZZA v1.5 – modifiche a §4, §6.1, §6.2, §8.2, §11, §13 in attesa di approvazione** (09/10/2026). La v1.4 resta approvata. Le decisioni ancora aperte sono elencate in §11.2.
+> Stato: **APPROVATO – v1.5** (09/10/2026). Le decisioni ancora aperte sono elencate in §11.2.
 > Prodotto: **Specula Threat**, modulo di Threat Intelligence della piattaforma **Specula** (moduli futuri: Exposure, Third Party, OSINT, CLOSINT). Repository: `specula-platform`.
 > Documenti collegati: [specifica-funzionale-dashboard.md](specifica-funzionale-dashboard.md) · [identita-visiva.md](identita-visiva.md)
 >
